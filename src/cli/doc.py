@@ -13,7 +13,7 @@ def doc():
 @click.argument("db_name")
 @click.argument("body")
 def doc_create(db_name: str, body: str):
-    node = cluster.nodes[0]
+    node = cluster.default_node
     db = node.db(db_name)
     doc = db.insert(json.loads(body))
     click.echo(json.dumps(doc.body, indent=2))
@@ -23,7 +23,7 @@ def doc_create(db_name: str, body: str):
 @click.argument("db_name")
 @click.option("--pretty", default=False)
 def doc_list(db_name: str, pretty: bool):
-    node = cluster.nodes[0]
+    node = cluster.default_node
     db = node.db(db_name)
     for doc in db.list():
         out = json.dumps(doc.body, indent=2) if pretty else doc.body

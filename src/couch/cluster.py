@@ -7,10 +7,12 @@ from tqdm import tqdm
 from .credentials import password, username
 from .db import DB
 from .node import Node
+from .types import MembershipResponse
 
 
 class Cluster:
     nodes: list[Node]
+    default_node: Node
 
     def __init__(self):
         self.nodes = [
@@ -31,9 +33,11 @@ class Cluster:
             ),
         ]
 
+        self.default_node = self.nodes[0]
+
     def setup(self):
         click.echo("setting up cluster...")
-        setup_node = self.nodes[0]
+        setup_node = self.default_node
         for node in self.nodes[1:]:
             click.echo(f"joining {node.private_address} to cluster...")
             setup_node.post(
@@ -84,23 +88,30 @@ class Cluster:
         return len(actual) == len(self.nodes)
 
     def post(self, path: str, json: dict | None = None) -> requests.Response:
-        return self.nodes[0].post(path, json)
+        return self.default_node.post(path, json)
 
     def put(self, path: str, json: dict | None = None) -> requests.Response:
-        return self.nodes[0].put(path, json)
+        return self.default_node.put(path, json)
 
     def get(self, path: str) -> requests.Response:
-        return self.nodes[0].get(path)
+        return self.default_node.get(path)
+
+    def delete(self, path: str) -> requests.Response:
+        return self.default_node.delete(path)
 
     def db(self, name: str) -> DB:
-        return self.nodes[0].db(name)
+        return self.default_node.db(name)
 
     def dbs(self) -> list[DB]:
-        return self.nodes[0].dbs()
+        return self.default_node.dbs()
+
+    def membership(self) -> MembershipResponse:
+        resp = self.get("/_membership")
+        return resp.json()
 
     def create_seed_data(self, num_dbs: int = 2000):
         print("creating seed data...")
-        node = self.nodes[0]
+        node = self.default_node
         with ThreadPoolExecutor(max_workers=16) as executor:
             futures = []
             for i in range(num_dbs):
@@ -139,6 +150,24 @@ class Cluster:
                         pbar.update(1)
 
         print("done")
+
+    def get_node(self, name: str) -> Node:
+        for node in cluster.nodes:
+            if node.private_address == name:
+                return node
+            if node.local_address == name:
+                return node
+            if node.private_address.endswith(name):
+                return node
+            if node.private_address.startswith(name):
+                return node
+        raise Exception(f"node {name} not found")
+
+    def remove_node(self, name: str):
+        node = self.get_node(name)
+        resp = self.get(f"/_node/_local/_nodes/couchdb@{node.private_address}")
+        rev = resp.json()["_rev"]
+        self.delete(f"/_node/_local/_nodes/couchdb@{node.private_address}?rev={rev}")
 
     def assert_all_dbs_have_one_doc(self, num_dbs: int = 2000):
         for node in self.nodes:

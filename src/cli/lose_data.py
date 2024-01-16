@@ -8,7 +8,7 @@ from couch.cluster import cluster
 
 @click.command()
 def lose_data():
-    node = cluster.nodes[0]
+    node = cluster.default_node
     total_dbs = node.total_dbs()
     if total_dbs == 0:
         click.echo("cluster is empty, setting up cluster")
@@ -62,7 +62,7 @@ def lose_data():
         counts = {}
         for db in dbs:
             count = db.count()
-            counts[node] = count
+            counts[db.node] = count
             click.echo(f"{db} doc count: {count}")
         click.echo()
         if len(set(counts.values())) == 1:

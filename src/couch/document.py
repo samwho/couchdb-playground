@@ -28,3 +28,10 @@ class Document:
     def body(self) -> dict[str, Any]:
         resp = self.db.node.get(f"/{self.db.name}/{self.id}")
         return resp.json()
+
+    def delete(self):
+        self.db.node.delete(f"/{self.db.name}/{self.id}?rev={self.rev}")
+
+    def update(self, body: dict[str, Any]):
+        resp = self.db.node.put(f"/{self.db.name}/{self.id}?rev={self.rev}", json=body)
+        return Document.from_response(self.db, resp)

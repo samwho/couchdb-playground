@@ -30,3 +30,10 @@ class DB:
         resp = self.node.get(f"/{self.name}/_all_docs")
         body = resp.json()
         return [Document(self, row["id"], row["value"]["rev"]) for row in body["rows"]]
+
+    def delete(self):
+        self.node.delete(f"/{self.name}")
+
+    def get(self):
+        resp = self.node.get(f"/{self.name}")
+        return resp.json()

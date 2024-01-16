@@ -56,13 +56,16 @@ class Node:
     def get(self, path: str) -> requests.Response:
         return self.request("GET", path)
 
+    def delete(self, path: str) -> requests.Response:
+        return self.request("DELETE", path)
+
     def total_dbs(self) -> int:
         resp = self.get("/_dbs")
         body = resp.json()
         return body["doc_count"]
 
-    def create_db(self, name: str) -> DB:
-        self.put(f"/{name}")
+    def create_db(self, name: str, q: int = 2, n: int = 2) -> DB:
+        self.put(f"/{name}?q={q}&n={n}")
         return DB(self, name)
 
     def db(self, name: str) -> DB:
