@@ -3,27 +3,10 @@ from time import sleep
 
 import click
 import requests
-
 from cluster import cluster
 
 
-@click.group()
-def cli():
-    pass
-
-
-@cli.command()
-def cluster_status():
-    click.echo("Dropped the database")
-
-
-@cli.command()
-def setup_cluster():
-    cluster.setup()
-
-
-@cli.command()
-def lose_data():
+def main():
     node = cluster.nodes[0]
     total_dbs = node.total_dbs()
     if total_dbs == 0:
@@ -92,7 +75,3 @@ def lose_data():
                 click.echo("all nodes reached a doc count of 1, no data loss this time")
                 exit(0)
         sleep(2)
-
-
-if __name__ == "__main__":
-    cli()
