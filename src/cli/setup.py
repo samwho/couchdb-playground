@@ -1,5 +1,5 @@
 import click
-from cluster import cluster
+from couch.cluster import cluster
 
 
 def main():

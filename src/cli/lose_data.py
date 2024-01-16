@@ -3,7 +3,7 @@ from time import sleep
 
 import click
 import requests
-from cluster import cluster
+from couch.cluster import cluster
 
 
 def main():

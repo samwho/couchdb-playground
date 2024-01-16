@@ -1,10 +1,12 @@
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from tqdm import tqdm
-import requests
+
 import click
-from db import DB
-from node import Node
-from credentials import username, password
+import requests
+from tqdm import tqdm
+
+from .credentials import password, username
+from .db import DB
+from .node import Node
 
 
 class Cluster:

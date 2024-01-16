@@ -2,11 +2,11 @@ from typing import TYPE_CHECKING
 
 import requests
 
-from credentials import password, session, username
-from db import DB
+from .credentials import password, session, username
+from .db import DB
 
 if TYPE_CHECKING:
-    from cluster import Cluster
+    from .cluster import Cluster
 
 
 class Node:
