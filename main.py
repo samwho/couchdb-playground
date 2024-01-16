@@ -1,71 +1,98 @@
-from time import sleep
-import requests
 from os import system
-from common import nodes, num_dbs
-from cluster import setup_cluster
-from seed import create_seed_data, wait_for_replication, assert_all_dbs_have_one_doc
-from dbs import get_total_dbs, get_missing_db, create_db, get_doc_count
+from time import sleep
 
-total_dbs = get_total_dbs()
-if total_dbs == 0:
-    print("cluster is empty, setting up cluster")
-    setup_cluster()
-    create_seed_data()
-    wait_for_replication()
-elif total_dbs == num_dbs + 2:
-    print("cluster is already setup, making sure all dbs have 1 document in them...")
-    try:
-        assert_all_dbs_have_one_doc()
-    except Exception as e:
-        print(f"cluster not valid: {e}")
-        exit(1)
-else:
-    print("must run against a fresh cluster, found existing dbs, exiting")
-    exit(1)
+import click
+import requests
 
-print("simulating a node failure by destroying couchdb3 and its data...")
-system("docker compose down -v couchdb3")
-system("docker compose up -d couchdb3")
-system("docker compose restart couchdb1")
+from cluster import cluster
 
-print()
-print("couchdb3 is back up, it should have started replicating again")
 
-print("finding a database that's missing on couchdb3...")
-node, db = get_missing_db()
-
-print(f"found missing database {db} on node {nodes[node]['private_address']}")
-
-if node == -1:
-    print(
-        "no missing databases found, unable to replicate problem this time, try again"
-    )
-    exit(0)
-
-print(f"creating new empty database {db} on node {nodes[node]['private_address']}...")
-
-try:
-    create_db(node, db)
-except requests.RequestException as e:
-    print(f"error while creating db (this is expected): {e.response.text}")
+@click.group()
+def cli():
     pass
 
-print("polling doc count from all nodes...")
-print()
 
-while True:
-    counts = {}
-    for node in range(len(nodes)):
-        count = get_doc_count(node, db)
-        counts[node] = count
-        print(f"{nodes[node]['private_address']}/{db} doc count: {count}")
-    print()
-    if len(set(counts.values())) == 1:
-        val = set(counts.values()).pop()
-        if val == 0:
-            print("all nodes reached zero doc count, this means the cluster lost data")
-            exit(0)
-        else:
-            print("all nodes reached a doc count of 1, no data loss this time")
-            exit(0)
-    sleep(2)
+@cli.command()
+def cluster_status():
+    click.echo("Dropped the database")
+
+
+@cli.command()
+def setup_cluster():
+    cluster.setup()
+
+
+@cli.command()
+def lose_data():
+    node = cluster.nodes[0]
+    total_dbs = node.total_dbs()
+    if total_dbs == 0:
+        click.echo("cluster is empty, setting up cluster")
+        cluster.setup()
+        cluster.create_seed_data(num_dbs=2000)
+        cluster.wait_for_sync()
+    elif total_dbs == 2000 + 2:
+        click.echo(
+            "cluster is already setup, making sure all dbs have 1 document in them..."
+        )
+        try:
+            cluster.assert_all_dbs_have_one_doc(num_dbs=2000)
+        except Exception as e:
+            click.echo(f"cluster not valid: {e}")
+            exit(1)
+    else:
+        click.echo("must run against a fresh cluster, found existing dbs, exiting")
+        exit(1)
+
+    click.echo("simulating a node failure by destroying couchdb3 and its data...")
+    system("docker compose down -v couchdb3")
+    system("docker compose up -d couchdb3")
+    system("docker compose restart couchdb1")
+
+    click.echo()
+    click.echo("couchdb3 is back up, it should have started replicating again")
+
+    click.echo("finding a database that's missing on couchdb3...")
+
+    db = cluster.random_missing_db()
+    if db is None:
+        click.echo(
+            "no missing databases found, unable to replicate problem this time, try again"
+        )
+        exit(0)
+
+    click.echo(f"found missing database {db}")
+    click.echo(f"creating new empty database {db}...")
+
+    try:
+        db.node.create_db(db.name)
+    except requests.RequestException as e:
+        click.echo(f"error while creating db (this is expected): {e.response}")
+
+    click.echo("polling doc count from all nodes...")
+    click.echo()
+
+    dbs = [n.db(db.name) for n in cluster.nodes]
+
+    while True:
+        counts = {}
+        for db in dbs:
+            count = db.count()
+            counts[node] = count
+            click.echo(f"{db} doc count: {count}")
+        click.echo()
+        if len(set(counts.values())) == 1:
+            val = set(counts.values()).pop()
+            if val == 0:
+                click.echo(
+                    "all nodes reached zero doc count, this means the cluster lost data"
+                )
+                exit(0)
+            else:
+                click.echo("all nodes reached a doc count of 1, no data loss this time")
+                exit(0)
+        sleep(2)
+
+
+if __name__ == "__main__":
+    cli()
