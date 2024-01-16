@@ -1,0 +1,68 @@
+version: '3'
+
+services:
+  couchdb1:
+    image: couchdb:3.2
+    hostname: couchdb1.cluster.local
+    environment:
+      COUCHDB_USER: admin
+      COUCHDB_PASSWORD: password
+      ERL_FLAGS: |
+        -name couchdb@couchdb1.cluster.local
+        -setcookie "brumbrum"
+        -kernel inet_dist_listen_min 9100
+        -kernel inet_dist_listen_max 9200
+    ports:
+      - "5984:5984"
+    volumes:
+      - couchdb1_data:/opt/couchdb/data
+      - ./couch.ini:/opt/couchdb/etc/local.d/local.ini
+    networks:
+      - couchdb_network
+
+  couchdb2:
+    image: couchdb:3.2
+    hostname: couchdb2.cluster.local
+    environment:
+      COUCHDB_USER: admin
+      COUCHDB_PASSWORD: password
+      ERL_FLAGS: |
+        -name couchdb@couchdb2.cluster.local
+        -setcookie "brumbrum"
+        -kernel inet_dist_listen_min 9100
+        -kernel inet_dist_listen_max 9200
+    ports:
+      - "5985:5984"
+    volumes:
+      - couchdb2_data:/opt/couchdb/data
+      - ./couch.ini:/opt/couchdb/etc/local.d/local.ini
+    networks:
+      - couchdb_network
+
+  couchdb3:
+    image: couchdb:3.2
+    hostname: couchdb3.cluster.local
+    environment:
+      COUCHDB_USER: admin
+      COUCHDB_PASSWORD: password
+      ERL_FLAGS: |
+        -name couchdb@couchdb3.cluster.local
+        -setcookie "brumbrum"
+        -kernel inet_dist_listen_min 9100
+        -kernel inet_dist_listen_max 9200
+    ports:
+      - "5986:5984"
+    volumes:
+      - couchdb3_data:/opt/couchdb/data
+      - ./couch.ini:/opt/couchdb/etc/local.d/local.ini
+    networks:
+      - couchdb_network
+
+volumes:
+  couchdb1_data:
+  couchdb2_data:
+  couchdb3_data:
+
+networks:
+  couchdb_network:
+    driver: bridge
