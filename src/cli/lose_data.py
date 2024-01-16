@@ -6,7 +6,8 @@ import requests
 from couch.cluster import cluster
 
 
-def main():
+@click.command()
+def lose_data():
     node = cluster.nodes[0]
     total_dbs = node.total_dbs()
     if total_dbs == 0:

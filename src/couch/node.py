@@ -56,10 +56,6 @@ class Node:
     def get(self, path: str) -> requests.Response:
         return self.request("GET", path)
 
-    def all_dbs(self) -> list[str]:
-        resp = self.get("/_all_dbs")
-        return resp.json()
-
     def total_dbs(self) -> int:
         resp = self.get("/_dbs")
         body = resp.json()
@@ -71,3 +67,6 @@ class Node:
 
     def db(self, name: str) -> DB:
         return DB(self, name)
+
+    def dbs(self) -> list[DB]:
+        return [DB(self, name) for name in self.get("/_all_dbs").json()]

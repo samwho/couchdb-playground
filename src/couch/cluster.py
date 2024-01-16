@@ -95,6 +95,9 @@ class Cluster:
     def db(self, name: str) -> DB:
         return self.nodes[0].db(name)
 
+    def dbs(self) -> list[DB]:
+        return self.nodes[0].dbs()
+
     def create_seed_data(self, num_dbs: int = 2000):
         print("creating seed data...")
         node = self.nodes[0]
@@ -161,13 +164,13 @@ class Cluster:
 
     def all_missing_dbs(self) -> dict[Node, set[str]]:
         with ThreadPoolExecutor(max_workers=len(self.nodes)) as executor:
-            futures: list[Future[list[str]]] = []
+            futures: list[Future[list[DB]]] = []
             for node in self.nodes:
-                futures.append(executor.submit(node.all_dbs))
+                futures.append(executor.submit(node.dbs))
 
             dbs: dict[Node, set[str]] = {}
             for i, future in enumerate(futures):
-                dbs[self.nodes[i]] = set(future.result())
+                dbs[self.nodes[i]] = set([db.name for db in future.result()])
 
             all_dbs = set()
             for node in dbs:

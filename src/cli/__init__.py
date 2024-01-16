@@ -1,8 +1,9 @@
-from couch.cluster import cluster
-import cli.lose_data
-import cli.setup
-import cli.status
 import click
+from couch.cluster import cluster
+
+from .db import db
+from .doc import doc
+from .lose_data import lose_data
 
 
 @click.group()
@@ -11,27 +12,13 @@ def main():
 
 
 @main.command()
-def status():
-    cli.status.main()
-
-
-@main.command()
 def setup():
-    cli.setup.main()
+    if cluster.is_setup():
+        click.echo("cluster is setup")
+        return
+    cluster.setup()
 
 
-@main.command()
-def lose_data():
-    cli.lose_data.main()
-
-
-@main.group()
-def db():
-    pass
-
-
-@db.command()
-@click.argument("name")
-def create(name: str):
-    db = cluster.nodes[0].create_db(name)
-    click.echo(f"created db {db.name}")
+main.add_command(db)
+main.add_command(doc)
+main.add_command(lose_data)
