@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 
 import requests
+from couch.types import SystemResponse
 
 from .credentials import password, session, username
 from .db import DB
@@ -66,10 +67,13 @@ class Node:
 
     def create_db(self, name: str, q: int = 2, n: int = 2) -> DB:
         self.put(f"/{name}?q={q}&n={n}")
-        return DB(self, name)
+        return DB(self.cluster, name)
 
     def db(self, name: str) -> DB:
-        return DB(self, name)
+        return DB(self.cluster, name)
 
     def dbs(self) -> list[DB]:
-        return [DB(self, name) for name in self.get("/_all_dbs").json()]
+        return [DB(self.cluster, name) for name in self.get("/_all_dbs").json()]
+
+    def system(self) -> SystemResponse:
+        return self.get("/_node/_local/_system").json()

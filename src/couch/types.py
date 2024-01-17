@@ -4,3 +4,245 @@ from typing import TypedDict
 class MembershipResponse(TypedDict):
     all_nodes: list[str]
     cluster_nodes: list[str]
+
+
+class Sizes(TypedDict):
+    file: int
+    external: int
+    active: int
+
+
+class ClusterOpts(TypedDict):
+    n: int
+    q: int
+    r: int
+    w: int
+
+
+class DatabaseResponse(TypedDict):
+    db_name: str
+    purge_seq: str
+    update_seq: str
+    sizes: Sizes
+    props: dict[str, str]
+    doc_del_count: int
+    doc_count: int
+    disk_format_version: int
+    compact_running: bool
+    instance_start_time: str
+    cluster: ClusterOpts
+
+
+class MemoryInfo(TypedDict):
+    other: int
+    atom: int
+    atom_used: int
+    processes: int
+    processes_used: int
+    binary: int
+    code: int
+    ets: int
+
+
+class MessageQueueInfo(TypedDict, total=False):
+    couch_file: dict
+    couch_db_updater: dict
+    couch_server: int
+    couch_server_3: int
+    ibrowse: int
+    mem3_shards: int
+    couch_epi_sup: int
+    kernel_sup: int
+    logger_std_h_ssl_handler: int
+    couch_replicator_sup: int
+    ssl_server_session_cache_sup: int
+    inet_db: int
+    dtls_server_session_cache_sup: int
+    tls_server_session_ticket_sup: int
+    config_sup: int
+    logger_proxy: int
+    kernel_refc: int
+    couch_replication: int
+    folsom_sup: int
+    rexi_server_sup: int
+    setup_sup: int
+    config_event: int
+    couch_replicator_scheduler: int
+    couch_stats_sup: int
+    ssl_pem_cache: int
+    couch_epi_functions_gen_chttpd_auth: int
+    httpc_sup: int
+    couch_server_6: int
+    couch_event_sup2: int
+    couch_plugin: int
+    couch_epi_data_gen_dreyfus_black_list: int
+    dtls_sup: int
+    mem3_reshard_dbdoc: int
+    ddoc_cache_sup: int
+    tls_sup: int
+    logger_sup: int
+    erl_signal_server: int
+    global_group: int
+    net_kernel: int
+    inets_sup: int
+    couch_epi_functions_gen_feature_flags: int
+    httpc_handler_sup: int
+    couch_replicator_clustering: int
+    chttpd_sup: int
+    rexi_server_couchdb_at_couchdb2_cluster_local: int
+    global_changes_sup: int
+    mem3_nodes: int
+    ibrowse_sup: int
+    logger_handler_watcher: int
+    runtime_tools_sup: int
+    dreyfus_index_manager: int
+    mem3_events: int
+    rexi_server: int
+    couch_peruser_sup: int
+    erl_prim_loader: int
+    auth: int
+    sasl_sup: int
+    couch_task_status: int
+    couch_replicator_rate_limiter: int
+    smoosh_sup: int
+    couch_epi_data_gen_flags_config: int
+    rexi_server_couchdb_at_couchdb1_cluster_local: int
+    chttpd: int
+    rexi_buffer_couchdb_at_couchdb3_cluster_local: int
+    couch_server_4: int
+    sasl_safe_sup: int
+    mem3_sup: int
+    couch_replicator_doc_processor: int
+    couch_primary_services: int
+    erl_epmd: int
+    mango_sup: int
+    couch_server_1: int
+    net_sup: int
+    mem3_reshard: int
+    ddoc_cache_lru: int
+    folsom_meter_timer_server: int
+    dtls_server_sup: int
+    ioq_sup: int
+    application_controller: int
+    alarm_handler: int
+    tls_server_sup: int
+    couch_index_server: int
+    rexi_sup: int
+    couch_log_server: int
+    custodian_db_checker: int
+    standard_error: int
+    ken_server: int
+    mem3_reshard_sup: int
+    chttpd_auth_cache: int
+    couch_epi_functions_gen_couch_index: int
+    config: int
+    couch_server_7: int
+    httpd_sup: int
+    couch_peruser: int
+    kernel_safe_sup: int
+    jwtf_keystore: int
+    ssl_sup: int
+    couch_prometheus_server: int
+    rexi_buffer_sup: int
+    code_server: int
+    couch_stats_aggregator: int
+    custodian_server: int
+    couch_epi_functions_gen_chttpd_handlers: int
+    httpc_manager: int
+    couch_server_2: int
+    couch_replicator_connection: int
+    mem3_seeds: int
+    rexi_buffer_couchdb_at_couchdb2_cluster_local: int
+    global_name_server: int
+    rexi_server_couchdb_at_couchdb3_cluster_local: int
+    couch_proc_manager: int
+    ioq: int
+    rexi_server_mon: int
+    chttpd_auth_cache_lru: int
+    tls_client_ticket_store: int
+    mem3_reshard_job_sup: int
+    folsom_metrics_histogram_ets: int
+    ssl_admin_sup: int
+    erts_code_purger: int
+    release_handler: int
+    couch_stats_process_tracker: int
+    ssl_manager: int
+    dtls_connection_sup: int
+    couch_epi_functions_gen_couch_db: int
+    user: int
+    rexi_buffer_couchdb_at_couchdb1_cluster_local: int
+    couch_server_5: int
+    mem3_sync: int
+    couch_secondary_services: int
+    ssl_connection_sup: int
+    rex: int
+    init: int
+    couch_event_server: int
+    inet_gethost_native: int
+    ddoc_cache_opener: int
+    couch_index_sup: int
+    dreyfus_sup: int
+    couch_log_sup: int
+    couch_epi_functions_gen_chttpd: int
+    tls_connection_sup: int
+    couch_httpd_vhost: int
+    ken_sup: int
+    couch_uuids: int
+    file_server_2: int
+    couch_replicator_scheduler_sup: int
+    global_changes_server: int
+    standard_error_sup: int
+    socket_registry: int
+    timer_server: int
+    dtls_listener_sup: int
+    couch_server_8: int
+    mem3_sync_nodes: int
+    folsom_sample_slide_sup: int
+    logger: int
+    mochiweb_clock: int
+    jwtf_sup: int
+    ssl_upgrade_server_session_cache_sup: int
+    couch_prometheus_sup: int
+    rexi_buffer_mon: int
+    inet_gethost_native_sup: int
+    couch_sup: int
+    error_logger: int
+    ssl_listen_tracker_sup: int
+    smoosh_server: int
+    custodian_sup: int
+    couch_epi_functions_gen_global_changes: int
+    httpc_profile_sup: int
+
+
+class DistributionInfo(TypedDict):
+    recv_oct: int
+    recv_cnt: int
+    recv_max: int
+    recv_avg: int
+    recv_dvi: int
+    send_oct: int
+    send_cnt: int
+    send_max: int
+    send_avg: int
+    send_pend: int
+
+
+class SystemResponse(TypedDict):
+    uptime: int
+    memory: MemoryInfo
+    run_queue: int
+    run_queue_dirty_cpu: int
+    ets_table_count: int
+    context_switches: int
+    reductions: int
+    garbage_collection_count: int
+    words_reclaimed: int
+    io_input: int
+    io_output: int
+    os_proc_count: int
+    stale_proc_count: int
+    process_count: int
+    process_limit: int
+    message_queues: MessageQueueInfo
+    internal_replication_jobs: int
+    distribution: dict[str, DistributionInfo]

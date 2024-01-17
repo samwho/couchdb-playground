@@ -109,49 +109,7 @@ class Cluster:
         resp = self.get("/_membership")
         return resp.json()
 
-    def create_seed_data(self, num_dbs: int = 2000):
-        print("creating seed data...")
-        node = self.default_node
-        with ThreadPoolExecutor(max_workers=16) as executor:
-            futures = []
-            for i in range(num_dbs):
-
-                def do(i):
-                    db = node.create_db(f"db-{i}")
-                    db.insert({})
-
-                futures.append(executor.submit(do, i))
-
-            with tqdm(total=num_dbs) as pbar:
-                for future in as_completed(futures):
-                    future.result()
-                    pbar.update(1)
-        print("done")
-
-    def wait_for_sync(self):
-        print("waiting for replication...")
-        for node in self.nodes:
-            with ThreadPoolExecutor(max_workers=16) as executor:
-                futures = []
-
-                def do(db: DB):
-                    while True:
-                        if db.count() == 1:
-                            break
-
-                with tqdm(total=2000) as pbar:
-                    pbar.set_description(node.private_address)
-                    for i in range(2000):
-                        db = node.db(f"db-{i}")
-                        futures.append(executor.submit(do, db))
-
-                    for future in as_completed(futures):
-                        future.result()
-                        pbar.update(1)
-
-        print("done")
-
-    def get_node(self, name: str) -> Node:
+    def get_node(self, name: str) -> Node | None:
         for node in cluster.nodes:
             if node.private_address == name:
                 return node
@@ -161,35 +119,18 @@ class Cluster:
                 return node
             if node.private_address.startswith(name):
                 return node
-        raise Exception(f"node {name} not found")
+        return None
 
-    def remove_node(self, name: str):
-        node = self.get_node(name)
+    def remove_node(self, node: Node):
         resp = self.get(f"/_node/_local/_nodes/couchdb@{node.private_address}")
         rev = resp.json()["_rev"]
         self.delete(f"/_node/_local/_nodes/couchdb@{node.private_address}?rev={rev}")
 
-    def assert_all_dbs_have_one_doc(self, num_dbs: int = 2000):
-        for node in self.nodes:
-            with ThreadPoolExecutor(max_workers=16) as executor:
-                futures = []
+    def add_node(self, node: Node):
+        self.put(f"/_node/_local/_nodes/couchdb@{node.private_address}", json={})
 
-                def do(db: DB):
-                    count = db.count()
-                    if count != 1:
-                        raise Exception(
-                            f"node {node.private_address}/db-{db} has {count} docs"
-                        )
-
-                with tqdm(total=num_dbs) as pbar:
-                    pbar.set_description(node.private_address)
-                    for db in range(num_dbs):
-                        db = node.db(f"db-{db}")
-                        futures.append(executor.submit(do, db))
-
-                    for future in as_completed(futures):
-                        future.result()
-                        pbar.update(1)
+    def create_db(self, name: str, q: int = 2, n: int = 2) -> DB:
+        return self.default_node.create_db(name, q=q, n=n)
 
     def all_missing_dbs(self) -> dict[Node, set[str]]:
         with ThreadPoolExecutor(max_workers=len(self.nodes)) as executor:
