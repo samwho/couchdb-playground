@@ -175,11 +175,17 @@ class Cluster:
         return self.nodes[i]
 
     def add_node(self) -> Node:
-        node = Node.create(self.name)
-        self.put(f"/_node/_local/_nodes/couchdb@{node.private_address}", json={})
-        self.nodes.append(node)
+        new_node = Node.create(self.name)
+        self.put(f"/_node/_local/_nodes/couchdb@{new_node.private_address}", json={})
+
+        new_node.reload()
+        for node in self.nodes:
+            new_node.put(
+                f"/_node/_local/_nodes/couchdb@{node.private_address}", json={}
+            )
+        self.nodes.append(new_node)
         self.reorder_nodes()
-        return node
+        return new_node
 
     def create_db(self, name: str, q: int = 2, n: int = 2) -> DB:
         return self.default_node.create_db(name, q=q, n=n)

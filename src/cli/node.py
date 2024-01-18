@@ -70,3 +70,12 @@ def logs(index: int):
 
     for chunk in node.container.logs(stream=True):
         print(chunk.decode("utf-8"), end="")
+
+
+@node.command()
+@click.argument("index", type=int)
+def restart(index: int):
+    cluster = Cluster.current()
+    node = cluster.get_node(index)
+    node.restart()
+    logger.info(f"restarted node {index}")

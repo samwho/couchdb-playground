@@ -72,6 +72,9 @@ class Node:
     def uptime(self) -> timedelta:
         return datetime.now() - self.started_at()
 
+    def restart(self):
+        self.container.restart()
+
     def destroy(self, remove=True, keep_data=False):
         if remove:
             self.remove()
