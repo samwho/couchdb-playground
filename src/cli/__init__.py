@@ -1,5 +1,9 @@
+import logging
+import sys
+
 import click
-from couch.cluster import cluster as couch_cluster
+from couch.cluster import set_current_cluster, set_default_node
+from couch.log import logger
 
 from .cluster import clster
 from .db import db
@@ -9,14 +13,16 @@ from .test import test
 
 
 @click.group()
-@click.option("--node", default="couchdb1")
-def main(node: str):
-    n = couch_cluster.get_node(node)
-    if n is None:
-        click.echo(f'couldn\'t find node "{node}"')
-        exit(1)
-    couch_cluster.default_node = n
-    pass
+@click.option("--node", default=0)
+@click.option("--cluster", default="default")
+@click.option("-v", "--verbose", default=False, is_flag=True)
+def main(verbose: bool, node: int, cluster: str):
+    logger.setLevel(logging.DEBUG if verbose else logging.INFO)
+    if "cluster" in sys.argv:
+        return
+
+    set_current_cluster(cluster)
+    set_default_node(node)
 
 
 main.add_command(db)

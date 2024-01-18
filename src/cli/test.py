@@ -7,9 +7,9 @@ from time import sleep
 
 import click
 import requests
-from couch.cluster import cluster
 from couch.db import DB
 from tqdm import tqdm
+from couch.cluster import Cluster
 
 
 @click.group()
@@ -19,6 +19,7 @@ def test():
 
 def create_seed_data(num_dbs: int = 2000):
     print("creating seed data...")
+    cluster = Cluster.current()
     node = cluster.default_node
     with ThreadPoolExecutor(max_workers=16) as executor:
         futures = []
@@ -39,6 +40,7 @@ def create_seed_data(num_dbs: int = 2000):
 
 def wait_for_sync():
     print("waiting for replication...")
+    cluster = Cluster.current()
     for node in cluster.nodes:
         with ThreadPoolExecutor(max_workers=16) as executor:
             futures = []
@@ -62,6 +64,7 @@ def wait_for_sync():
 
 
 def assert_all_dbs_have_one_doc(num_dbs: int = 2000):
+    cluster = Cluster.current()
     for node in cluster.nodes:
         with ThreadPoolExecutor(max_workers=16) as executor:
             futures = []
@@ -86,6 +89,7 @@ def assert_all_dbs_have_one_doc(num_dbs: int = 2000):
 
 @test.command()
 def lose_data():
+    cluster = Cluster.current()
     node = cluster.default_node
     total_dbs = node.total_dbs()
     if total_dbs == 0:
@@ -161,6 +165,7 @@ def random_string(length: int) -> str:
 
 @test.command()
 def lose_node():
+    cluster = Cluster.current()
     db = cluster.create_db(random_string(10), n=3)
     click.echo(f"created db {db}")
 

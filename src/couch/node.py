@@ -1,7 +1,9 @@
 from typing import TYPE_CHECKING
 
 import requests
+from couch.log import logger
 from couch.types import SystemResponse
+from docker.models.containers import Container
 
 from .credentials import password, session, username
 from .db import DB
@@ -11,23 +13,30 @@ if TYPE_CHECKING:
 
 
 class Node:
+    container: Container
     cluster: "Cluster"
-    local_address: str
-    private_address: str
 
-    def __init__(self, cluster, local_address, private_address):
-        self.cluster = cluster
-        self.local_address = local_address
-        self.private_address = private_address
+    def __init__(self, container: Container):
+        self.container = container
+
+    def reload(self):
+        self.container.reload()
+
+    @property
+    def local_address(self) -> str:
+        port = self.container.ports["5984/tcp"][0]["HostPort"]
+        return f"http://localhost:{port}"
+
+    @property
+    def private_address(self) -> str:
+        return f"couchdb@{self.container.name}.cluster.local"
 
     def auth(self, username: str, password: str) -> requests.Response:
+        logger.debug(f"authenticating as {username}")
         url = f"{self.local_address}/_session"
         resp = session.post(url, json={"name": username, "password": password})
         resp.raise_for_status()
         return resp
-
-    def __str__(self) -> str:
-        return self.private_address
 
     def __eq__(self, __value: object) -> bool:
         if not isinstance(__value, Node):
@@ -45,6 +54,9 @@ class Node:
         if resp.status_code == 401:
             self.auth(username, password)
             return self.request(method, path, json)
+        logger.debug(f"{method} {url} {resp.status_code}")
+        if resp.status_code >= 400:
+            logger.debug(f"  body: {resp.text}")
         resp.raise_for_status()
         return resp
 
@@ -59,6 +71,13 @@ class Node:
 
     def delete(self, path: str) -> requests.Response:
         return self.request("DELETE", path)
+
+    def ok(self) -> bool:
+        try:
+            self.get("/_up")
+            return True
+        except requests.exceptions.ConnectionError:
+            return False
 
     def total_dbs(self) -> int:
         resp = self.get("/_dbs")

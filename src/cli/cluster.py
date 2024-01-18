@@ -1,5 +1,7 @@
+
 import click
-from couch.cluster import cluster
+import docker
+from couch.cluster import Cluster
 
 
 @click.group("cluster")
@@ -9,6 +11,7 @@ def clster():
 
 @clster.command()
 def setup():
+    cluster = Cluster.current()
     if cluster.is_setup():
         click.echo("cluster is setup")
         return
@@ -17,6 +20,7 @@ def setup():
 
 @clster.command()
 def membership():
+    cluster = Cluster.current()
     resp = cluster.membership()
     for node in resp["cluster_nodes"]:
         if node in resp["all_nodes"]:
@@ -27,19 +31,19 @@ def membership():
 
 @clster.command()
 @click.argument("name")
-def remove_node(name: str):
-    node = cluster.get_node(name)
-    if node is None:
-        click.echo(f'couldn\'t find node "{name}"')
-        exit(1)
-    cluster.remove_node(node)
-
+def init(name: str):
+    Cluster.init(name)
 
 @clster.command()
 @click.argument("name")
-def add_node(name: str):
-    node = cluster.get_node(name)
-    if node is None:
-        click.echo(f'couldn\'t find node "{name}"')
-        exit(1)
-    cluster.add_node(node)
+def destroy(name: str):
+    client = docker.from_env()
+    filters = {"label": f"cpg={name}"}
+
+    for container in client.containers.list(filters=filters):
+        container.stop()  # type: ignore
+    client.containers.prune(filters=filters)
+    for volume in client.volumes.list(filters=filters):
+        volume.remove(force=True) # type: ignore
+    client.volumes.prune(filters=filters)
+    client.networks.prune(filters=filters)

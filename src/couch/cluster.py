@@ -1,45 +1,134 @@
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+import tempfile
+from concurrent.futures import Future, ThreadPoolExecutor
+from time import sleep
+from typing import cast
+from uuid import uuid4
 
 import click
+import docker
 import requests
-from tqdm import tqdm
+from couch.log import logger
+from docker.models.containers import Container
 
 from .credentials import password, username
 from .db import DB
 from .node import Node
 from .types import MembershipResponse
 
+_current_cluster = "default"
+_default_node = 0
+
+
+def set_current_cluster(name: str):
+    global _current_cluster
+    _current_cluster = name
+
+
+def set_default_node(node: int):
+    global _default_node
+    _default_node = node
+
 
 class Cluster:
     nodes: list[Node]
     default_node: Node
 
-    def __init__(self):
-        self.nodes = [
-            Node(
-                local_address="http://localhost:5984",
-                private_address="couchdb1.cluster.local",
-                cluster=self,
-            ),
-            Node(
-                local_address="http://localhost:5985",
-                private_address="couchdb2.cluster.local",
-                cluster=self,
-            ),
-            Node(
-                local_address="http://localhost:5986",
-                private_address="couchdb3.cluster.local",
-                cluster=self,
-            ),
-        ]
+    @staticmethod
+    def init(name: str, num_nodes: int = 3) -> "Cluster":
+        client = docker.from_env()
 
-        self.default_node = self.nodes[0]
+        if len(client.networks.list(filters={"label": f"cpg={name}"})) != 0:
+            click.echo(f'cluster with name "{name}" already exists')
+            exit(1)
+
+        network = client.networks.create(
+            f"cpg-{name}", driver="bridge", labels={"cpg": name}
+        )
+        logger.debug(f"created network {network.name}")  # type: ignore
+
+        uuid = uuid4()
+        containers = []
+
+        for i in range(num_nodes):
+            config = tempfile.NamedTemporaryFile(delete=False, delete_on_close=False)
+            config.write(bytes(f"[couchdb]\nuuid = {uuid}\n", "utf-8"))
+            config.close()
+
+            client.volumes.create(name=f"cpg-{name}-{i}", labels={"cpg": name})
+
+            container = client.containers.run(
+                "couchdb:3.2",
+                name=f"cpg-{name}-{i}",
+                hostname=f"cpg-{name}-{i}.cluster.local",
+                detach=True,
+                network=f"cpg-{name}",
+                labels={"cpg": name},
+                ports={"5984/tcp": ("127.0.0.1", None)},
+                volumes={
+                    f"cpg-{name}-{i}": {"bind": "/opt/couchdb/data", "mode": "rw"},
+                    config.name: {
+                        "bind": "/opt/couchdb/etc/local.ini",
+                        "mode": "rw",
+                    },
+                },
+                environment={
+                    "COUCHDB_USER": username,
+                    "COUCHDB_PASSWORD": password,
+                    "ERL_FLAGS": f"-name couchdb@cpg-{name}-{i}.cluster.local -setcookie brumbrum -kernel inet_dist_listen_min 9100 -kernel inet_dist_listen_max 9200",
+                },
+            )
+            containers.append(container)
+
+            logger.debug(f"created container {container.name}")  # type: ignore
+
+        for container in containers:
+            container.reload()
+
+        nodes = [Node(container=container) for container in containers]
+        cluster = Cluster(nodes=nodes)
+        for node in nodes:
+            node.cluster = cluster
+
+        while not cluster.ok():
+            sleep(1)
+
+        cluster.setup()
+        return cluster
+
+    @staticmethod
+    def from_name(name: str) -> "Cluster":
+        client = docker.from_env()
+
+        network = client.networks.list(filters={"label": f"cpg={name}"})
+        if len(network) == 0:
+            click.echo(f'cluster with name "{name}" does not exist')
+            click.echo(f"run `python src/main.py cluster init {name}` to create it")
+            exit(1)
+
+        containers = client.containers.list(filters={"label": f"cpg={name}"})
+        nodes = [Node(container=cast(Container, container)) for container in containers]
+        cluster = Cluster(nodes=nodes)
+        for node in nodes:
+            node.cluster = cluster
+        return cluster
+
+    @staticmethod
+    def current() -> "Cluster":
+        return Cluster.from_name(_current_cluster)
+
+    def __init__(self, nodes: list[Node]):
+        nodes.sort(key=lambda n: str(n.container.name))
+        self.nodes = nodes
+        self.default_node = self.nodes[_default_node]
 
     def setup(self):
-        click.echo("setting up cluster...")
-        setup_node = self.default_node
+        if self.is_setup():
+            logger.debug("cluster is already setup, skipping setup")
+            return
+
+        logger.debug("configuring CouchDB clustering")
+        setup_node = self.nodes[0]
         for node in self.nodes[1:]:
-            click.echo(f"joining {node.private_address} to cluster...")
             setup_node.post(
                 "/_cluster_setup",
                 {
@@ -65,7 +154,7 @@ class Cluster:
                 },
             )
 
-        click.echo("finishing cluster...")
+            logger.debug(f"added node {node.private_address} to cluster")
 
         setup_node.post(
             "/_cluster_setup",
@@ -74,8 +163,13 @@ class Cluster:
             },
         )
 
-        setup_node.get("/_cluster_setup")
-        click.echo("done")
+        logger.debug("finished configuring CouchDB clustering")
+
+    def ok(self) -> bool:
+        for node in self.nodes:
+            if not node.ok():
+                return False
+        return True
 
     def is_setup(self) -> bool:
         expected = sorted([n.private_address for n in self.nodes])
@@ -109,17 +203,10 @@ class Cluster:
         resp = self.get("/_membership")
         return resp.json()
 
-    def get_node(self, name: str) -> Node | None:
-        for node in cluster.nodes:
-            if node.private_address == name:
-                return node
-            if node.local_address == name:
-                return node
-            if node.private_address.endswith(name):
-                return node
-            if node.private_address.startswith(name):
-                return node
-        return None
+    def get_node(self, i: int) -> Node | None:
+        print(f"getting node {i}")
+        print([n.container.name for n in self.nodes])
+        return self.nodes[i]
 
     def remove_node(self, node: Node):
         resp = self.get(f"/_node/_local/_nodes/couchdb@{node.private_address}")
@@ -157,6 +244,3 @@ class Cluster:
             if len(dbs) > 0:
                 return node.db(dbs.pop())
         return None
-
-
-cluster = Cluster()

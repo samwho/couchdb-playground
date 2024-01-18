@@ -1,7 +1,7 @@
 import json
 
 import click
-from couch.cluster import cluster
+from couch.cluster import Cluster
 
 
 @click.group()
@@ -12,7 +12,8 @@ def http():
 @http.command()
 @click.argument("path")
 def get(path: str):
-    resp = cluster.default_node.get(path)
+    cluster = Cluster.current()
+    resp = cluster.get(path)
     click.echo(json.dumps(resp.json(), indent=2))
 
 
@@ -20,19 +21,22 @@ def get(path: str):
 @click.argument("path")
 @click.argument("body")
 def post(path: str, body: str):
-    resp = cluster.default_node.post(path, json.loads(body))
+    cluster = Cluster.current()
+    resp = cluster.post(path, json.loads(body))
     click.echo(json.dumps(resp.json(), indent=2))
 
 
 @http.command()
 @click.argument("path")
 def delete(path: str):
-    resp = cluster.default_node.delete(path)
+    cluster = Cluster.current()
+    resp = cluster.delete(path)
     click.echo(json.dumps(resp.json(), indent=2))
 
 
 @http.command()
 @click.argument("path")
 def put(path: str):
-    resp = cluster.default_node.put(path)
+    cluster = Cluster.current()
+    resp = cluster.put(path)
     click.echo(json.dumps(resp.json(), indent=2))
