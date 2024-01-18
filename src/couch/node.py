@@ -1,3 +1,4 @@
+from uuid import uuid4
 import docker
 from typing import TYPE_CHECKING
 
@@ -23,6 +24,31 @@ class Node:
     def reload(self):
         self.container.reload()
 
+    @staticmethod
+    def create(cluster_name: str) -> "Node":
+        client = docker.from_env()
+        id = uuid4()
+        node_name = f"cpg-{cluster_name}-{id}"
+        client.volumes.create(name=node_name, labels={"cpg": cluster_name})
+
+        container = client.containers.run(
+            "couchdb:3.2",
+            name=node_name,
+            hostname=f"{node_name}.cluster.local",
+            detach=True,
+            network=f"cpg-{cluster_name}",
+            labels={"cpg": cluster_name},
+            ports={"5984/tcp": ("127.0.0.1", None)},
+            volumes={node_name: {"bind": "/opt/couchdb/data", "mode": "rw"}},
+            environment={
+                "COUCHDB_USER": username,
+                "COUCHDB_PASSWORD": password,
+                "ERL_FLAGS": f"-name couchdb@{node_name}.cluster.local -setcookie brumbrum -kernel inet_dist_listen_min 9100 -kernel inet_dist_listen_max 9200",
+            },
+        )
+
+        return Node(container)
+
     @property
     def local_address(self) -> str:
         port = self.container.ports["5984/tcp"][0]["HostPort"]
@@ -32,11 +58,24 @@ class Node:
     def private_address(self) -> str:
         return f"{self.container.name}.cluster.local"
 
-    def destroy(self):
+    def destroy(self, remove=True, keep_data=False):
+        if remove:
+            self.remove()
+
         client = docker.from_env()
         self.container.stop()
         self.container.remove()
-        client.volumes.get(self.container.name).remove()
+
+        if not keep_data:
+            client.volumes.get(self.container.name).remove()
+
+    def remove(self):
+        resp = self.cluster.get(f"/_node/_local/_nodes/couchdb@{self.private_address}")
+        rev = resp.json()["_rev"]
+        self.cluster.delete(
+            f"/_node/_local/_nodes/couchdb@{self.private_address}?rev={rev}"
+        )
+        self.cluster.nodes.remove(self)
 
     def auth(self, username: str, password: str) -> requests.Response:
         logger.debug(f"authenticating as {username}")

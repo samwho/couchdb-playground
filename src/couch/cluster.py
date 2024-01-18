@@ -30,8 +30,8 @@ def set_default_node(node: int):
 
 
 class Cluster:
+    name: str
     nodes: list[Node]
-    default_node: Node
 
     @staticmethod
     def init(name: str, num_nodes: int = 3) -> "Cluster":
@@ -46,39 +46,7 @@ class Cluster:
         )
         logger.debug(f"created network {network.name}")  # type: ignore
 
-        containers = []
-
-        for i in range(num_nodes):
-            node_name = f"cpg-{name}-{i}"
-            client.volumes.create(name=node_name, labels={"cpg": name})
-
-            container = client.containers.run(
-                "couchdb:3.2",
-                name=node_name,
-                hostname=f"{node_name}.cluster.local",
-                detach=True,
-                network=f"cpg-{name}",
-                labels={"cpg": name},
-                ports={"5984/tcp": ("127.0.0.1", None)},
-                volumes={node_name: {"bind": "/opt/couchdb/data", "mode": "rw"}},
-                environment={
-                    "COUCHDB_USER": username,
-                    "COUCHDB_PASSWORD": password,
-                    "ERL_FLAGS": f"-name couchdb@cpg-{name}-{i}.cluster.local -setcookie brumbrum -kernel inet_dist_listen_min 9100 -kernel inet_dist_listen_max 9200",
-                },
-            )
-            containers.append(container)
-
-            logger.debug(f"created container {container.name}")  # type: ignore
-
-        for container in containers:
-            container.reload()
-
-        nodes = [Node(container=container) for container in containers]
-        cluster = Cluster(nodes=nodes)
-        for node in nodes:
-            node.cluster = cluster
-
+        cluster = Cluster(name, [Node.create(name) for _ in range(num_nodes)])
         while not cluster.ok():
             sleep(1)
 
@@ -96,20 +64,26 @@ class Cluster:
             exit(1)
 
         containers = client.containers.list(filters={"label": f"cpg={name}"})
-        nodes = [Node(container=cast(Container, container)) for container in containers]
-        cluster = Cluster(nodes=nodes)
-        for node in nodes:
-            node.cluster = cluster
-        return cluster
+        nodes = [Node(cast(Container, container)) for container in containers]
+        return Cluster(name, nodes)
 
     @staticmethod
     def current() -> "Cluster":
         return Cluster.from_name(_current_cluster)
 
-    def __init__(self, nodes: list[Node]):
+    def __init__(self, name: str, nodes: list[Node]):
+        self.name = name
+
         nodes.sort(key=lambda n: str(n.container.name))
         self.nodes = nodes
-        self.default_node = self.nodes[_default_node]
+
+        for node in nodes:
+            node.cluster = self
+            node.reload()
+
+    @property
+    def default_node(self) -> Node:
+        return self.nodes[_default_node]
 
     def setup(self):
         if self.is_setup():
@@ -196,13 +170,9 @@ class Cluster:
     def get_node(self, i: int) -> Node | None:
         return self.nodes[i]
 
-    def remove_node(self, node: Node):
-        resp = self.get(f"/_node/_local/_nodes/couchdb@{node.private_address}")
-        rev = resp.json()["_rev"]
-        self.delete(f"/_node/_local/_nodes/couchdb@{node.private_address}?rev={rev}")
-
-    def add_node(self, node: Node):
-        self.put(f"/_node/_local/_nodes/couchdb@{node.private_address}", json={})
+    def add_node(self) -> Node:
+        # self.put(f"/_node/_local/_nodes/couchdb@{node.private_address}", json={})
+        pass
 
     def create_db(self, name: str, q: int = 2, n: int = 2) -> DB:
         return self.default_node.create_db(name, q=q, n=n)
