@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import requests
 from couch.log import logger
-from couch.types import SystemResponse
+from couch.types import MembershipResponse, SystemResponse
 from docker.models.containers import Container
 
 from .credentials import password, session, username
@@ -18,8 +18,10 @@ if TYPE_CHECKING:
 class Node:
     container: Container
     cluster: "Cluster"
+    index: int
 
-    def __init__(self, container: Container):
+    def __init__(self, index: int, container: Container):
+        self.index = index
         self.container = container
 
     def reload(self):
@@ -48,7 +50,7 @@ class Node:
             },
         )
 
-        return Node(container)
+        return Node(0, container)
 
     @property
     def local_address(self) -> str:
@@ -58,6 +60,10 @@ class Node:
     @property
     def private_address(self) -> str:
         return f"{self.container.name}.cluster.local"
+
+    @property
+    def name(self) -> str:
+        return self.container.name
 
     def started_at(self) -> datetime:
         started_at = self.container.attrs["State"]["StartedAt"]
@@ -84,6 +90,7 @@ class Node:
             f"/_node/_local/_nodes/couchdb@{self.private_address}?rev={rev}"
         )
         self.cluster.nodes.remove(self)
+        self.cluster.reorder_nodes()
 
     def auth(self, username: str, password: str) -> requests.Response:
         logger.debug(f"authenticating as {username}")
@@ -132,6 +139,10 @@ class Node:
             return True
         except requests.exceptions.ConnectionError:
             return False
+
+    def membership(self) -> MembershipResponse:
+        resp = self.get("/_membership")
+        return resp.json()
 
     def total_dbs(self) -> int:
         resp = self.get("/_dbs")

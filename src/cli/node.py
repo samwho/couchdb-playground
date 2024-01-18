@@ -35,7 +35,7 @@ def destroy(index: int):
 def create():
     cluster = Cluster.current()
     node = cluster.add_node()
-    logger.info(f"created node {node.container.name}")
+    logger.info(f"created node {node.name}")
 
 
 @node.command()

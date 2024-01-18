@@ -64,7 +64,7 @@ class Cluster:
             exit(1)
 
         containers = client.containers.list(filters={"label": f"cpg={name}"})
-        nodes = [Node(cast(Container, container)) for container in containers]
+        nodes = [Node(0, cast(Container, container)) for container in containers]
         return Cluster(name, nodes)
 
     @staticmethod
@@ -73,13 +73,17 @@ class Cluster:
 
     def __init__(self, name: str, nodes: list[Node]):
         self.name = name
-
-        nodes.sort(key=lambda n: str(n.container.name))
         self.nodes = nodes
+        self.reorder_nodes()
 
         for node in nodes:
             node.cluster = self
             node.reload()
+
+    def reorder_nodes(self):
+        self.nodes.sort(key=lambda n: n.started_at())
+        for i, node in enumerate(self.nodes):
+            node.index = i
 
     @property
     def default_node(self) -> Node:
@@ -173,6 +177,9 @@ class Cluster:
     def add_node(self) -> Node:
         node = Node.create(self.name)
         self.put(f"/_node/_local/_nodes/couchdb@{node.private_address}", json={})
+        self.nodes.append(node)
+        self.reorder_nodes()
+        return node
 
     def create_db(self, name: str, q: int = 2, n: int = 2) -> DB:
         return self.default_node.create_db(name, q=q, n=n)
