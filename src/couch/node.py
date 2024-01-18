@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from uuid import uuid4
 import docker
 from typing import TYPE_CHECKING
 
@@ -7,6 +6,8 @@ import requests
 from couch.log import logger
 from couch.types import MembershipResponse, SystemResponse
 from docker.models.containers import Container
+
+from utils import random_string
 
 from .credentials import password, session, username
 from .db import DB
@@ -30,7 +31,7 @@ class Node:
     @staticmethod
     def create(cluster_name: str) -> "Node":
         client = docker.from_env()
-        id = uuid4()
+        id = random_string()
         node_name = f"cpg-{cluster_name}-{id}"
         client.volumes.create(name=node_name, labels={"cpg": cluster_name})
 
