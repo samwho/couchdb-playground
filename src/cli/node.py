@@ -32,10 +32,12 @@ def destroy(index: int):
 
 
 @node.command()
-def create():
+@click.option("--count", default=1)
+def create(count: int):
     cluster = Cluster.current()
-    node = cluster.add_node()
-    logger.info(f"created node {node.name}")
+    for _ in range(count):
+        node = cluster.add_node()
+        logger.info(f"created node {node.name}")
 
 
 @node.command()

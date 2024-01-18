@@ -1,9 +1,10 @@
-from collections import defaultdict
 import click
 import docker
 from couch.cluster import Cluster
 from rich.table import Table
 from rich.console import Console
+
+from utils import parallel_map
 
 
 @click.group("cluster")
@@ -92,8 +93,9 @@ def membership():
 
 @clster.command()
 @click.argument("name", default="default")
-def init(name: str):
-    Cluster.init(name)
+@click.option("--nodes", default=3)
+def init(name: str, nodes: int):
+    Cluster.init(name, num_nodes=nodes)
 
 
 @clster.command()
@@ -102,12 +104,12 @@ def destroy(name: str):
     client = docker.from_env()
     filters = {"label": f"cpg={name}"}
 
-    for container in client.containers.list(filters=filters):
-        container.stop()  # type: ignore
+    parallel_map(lambda c: c.stop(), client.containers.list(filters=filters))
     client.containers.prune(filters=filters)
-    for volume in client.volumes.list(filters=filters):
-        volume.remove(force=True)  # type: ignore
+
+    parallel_map(lambda v: v.remove(), client.volumes.list(filters=filters))
     client.volumes.prune(filters=filters)
+
     client.networks.prune(filters=filters)
 
 

@@ -1,14 +1,14 @@
-import tempfile
 from concurrent.futures import Future, ThreadPoolExecutor
 from time import sleep
 from typing import cast
-from uuid import uuid4
 
 import click
 import docker
 import requests
 from couch.log import logger
 from docker.models.containers import Container
+
+from utils import parallel_map
 
 from .credentials import password, username
 from .db import DB
@@ -46,7 +46,8 @@ class Cluster:
         )
         logger.debug(f"created network {network.name}")  # type: ignore
 
-        cluster = Cluster(name, [Node.create(name) for _ in range(num_nodes)])
+        nodes = list(parallel_map(lambda _: Node.create(name), range(num_nodes)))
+        cluster = Cluster(name, nodes)
         while not cluster.ok():
             sleep(1)
 
@@ -76,14 +77,14 @@ class Cluster:
         self.nodes = nodes
         self.reorder_nodes()
 
-        for node in nodes:
-            node.cluster = self
-            node.reload()
-
     def reorder_nodes(self):
         self.nodes.sort(key=lambda n: n.started_at())
         for i, node in enumerate(self.nodes):
             node.index = i
+
+        for node in self.nodes:
+            node.cluster = self
+            node.reload()
 
     @property
     def default_node(self) -> Node:
@@ -180,9 +181,13 @@ class Cluster:
 
         new_node.reload()
         for node in self.nodes:
-            new_node.put(
-                f"/_node/_local/_nodes/couchdb@{node.private_address}", json={}
-            )
+            try:
+                new_node.put(
+                    f"/_node/_local/_nodes/couchdb@{node.private_address}", json={}
+                )
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code != 409:
+                    raise e
         self.nodes.append(new_node)
         self.reorder_nodes()
         return new_node
