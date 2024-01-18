@@ -1,6 +1,8 @@
 import click
 import docker
 from couch.cluster import Cluster
+from rich.table import Table
+from rich.console import Console
 
 
 @click.group("cluster")
@@ -47,3 +49,26 @@ def destroy(name: str):
         volume.remove(force=True)  # type: ignore
     client.volumes.prune(filters=filters)
     client.networks.prune(filters=filters)
+
+
+@clster.command()
+def list():
+    client = docker.from_env()
+    table = Table(
+        show_header=True,
+        header_style="bold magenta",
+        box=None,
+        show_lines=True,
+    )
+
+    table.add_column("name")
+    table.add_column("nodes")
+
+    for network in client.networks.list():
+        if network.attrs["Labels"].get("cpg"):
+            name = network.name.split("-")[1]
+            cluster = Cluster.from_name(name)
+            table.add_row(name, str(len(cluster.nodes)))
+
+    console = Console()
+    console.print(table)

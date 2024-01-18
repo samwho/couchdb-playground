@@ -2,3 +2,4 @@ requests
 tqdm
 click
 docker
+rich

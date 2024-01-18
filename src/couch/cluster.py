@@ -171,8 +171,8 @@ class Cluster:
         return self.nodes[i]
 
     def add_node(self) -> Node:
-        # self.put(f"/_node/_local/_nodes/couchdb@{node.private_address}", json={})
-        pass
+        node = Node.create(self.name)
+        self.put(f"/_node/_local/_nodes/couchdb@{node.private_address}", json={})
 
     def create_db(self, name: str, q: int = 2, n: int = 2) -> DB:
         return self.default_node.create_db(name, q=q, n=n)

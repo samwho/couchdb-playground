@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from uuid import uuid4
 import docker
 from typing import TYPE_CHECKING
@@ -57,6 +58,13 @@ class Node:
     @property
     def private_address(self) -> str:
         return f"{self.container.name}.cluster.local"
+
+    def started_at(self) -> datetime:
+        started_at = self.container.attrs["State"]["StartedAt"]
+        return datetime.fromisoformat(started_at[:-4])
+
+    def uptime(self) -> timedelta:
+        return datetime.now() - self.started_at()
 
     def destroy(self, remove=True, keep_data=False):
         if remove:
