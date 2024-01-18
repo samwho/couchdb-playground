@@ -1,4 +1,3 @@
-
 import click
 import docker
 from couch.cluster import Cluster
@@ -30,12 +29,13 @@ def membership():
 
 
 @clster.command()
-@click.argument("name")
+@click.argument("name", default="default")
 def init(name: str):
     Cluster.init(name)
 
+
 @clster.command()
-@click.argument("name")
+@click.argument("name", default="default")
 def destroy(name: str):
     client = docker.from_env()
     filters = {"label": f"cpg={name}"}
@@ -44,6 +44,6 @@ def destroy(name: str):
         container.stop()  # type: ignore
     client.containers.prune(filters=filters)
     for volume in client.volumes.list(filters=filters):
-        volume.remove(force=True) # type: ignore
+        volume.remove(force=True)  # type: ignore
     client.volumes.prune(filters=filters)
     client.networks.prune(filters=filters)

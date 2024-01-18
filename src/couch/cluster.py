@@ -46,31 +46,21 @@ class Cluster:
         )
         logger.debug(f"created network {network.name}")  # type: ignore
 
-        uuid = uuid4()
         containers = []
 
         for i in range(num_nodes):
-            config = tempfile.NamedTemporaryFile(delete=False, delete_on_close=False)
-            config.write(bytes(f"[couchdb]\nuuid = {uuid}\n", "utf-8"))
-            config.close()
-
-            client.volumes.create(name=f"cpg-{name}-{i}", labels={"cpg": name})
+            node_name = f"cpg-{name}-{i}"
+            client.volumes.create(name=node_name, labels={"cpg": name})
 
             container = client.containers.run(
                 "couchdb:3.2",
-                name=f"cpg-{name}-{i}",
-                hostname=f"cpg-{name}-{i}.cluster.local",
+                name=node_name,
+                hostname=f"{node_name}.cluster.local",
                 detach=True,
                 network=f"cpg-{name}",
                 labels={"cpg": name},
                 ports={"5984/tcp": ("127.0.0.1", None)},
-                volumes={
-                    f"cpg-{name}-{i}": {"bind": "/opt/couchdb/data", "mode": "rw"},
-                    config.name: {
-                        "bind": "/opt/couchdb/etc/local.ini",
-                        "mode": "rw",
-                    },
-                },
+                volumes={node_name: {"bind": "/opt/couchdb/data", "mode": "rw"}},
                 environment={
                     "COUCHDB_USER": username,
                     "COUCHDB_PASSWORD": password,
@@ -204,8 +194,6 @@ class Cluster:
         return resp.json()
 
     def get_node(self, i: int) -> Node | None:
-        print(f"getting node {i}")
-        print([n.container.name for n in self.nodes])
         return self.nodes[i]
 
     def remove_node(self, node: Node):

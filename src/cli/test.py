@@ -8,6 +8,7 @@ from time import sleep
 import click
 import requests
 from couch.db import DB
+from couch.log import logger
 from tqdm import tqdm
 from couch.cluster import Cluster
 
@@ -18,7 +19,6 @@ def test():
 
 
 def create_seed_data(num_dbs: int = 2000):
-    print("creating seed data...")
     cluster = Cluster.current()
     node = cluster.default_node
     with ThreadPoolExecutor(max_workers=16) as executor:
@@ -35,11 +35,9 @@ def create_seed_data(num_dbs: int = 2000):
             for future in as_completed(futures):
                 future.result()
                 pbar.update(1)
-    print("done")
 
 
 def wait_for_sync():
-    print("waiting for replication...")
     cluster = Cluster.current()
     for node in cluster.nodes:
         with ThreadPoolExecutor(max_workers=16) as executor:
@@ -59,8 +57,6 @@ def wait_for_sync():
                 for future in as_completed(futures):
                     future.result()
                     pbar.update(1)
-
-    print("done")
 
 
 def assert_all_dbs_have_one_doc(num_dbs: int = 2000):
@@ -92,9 +88,8 @@ def lose_data():
     cluster = Cluster.current()
     node = cluster.default_node
     total_dbs = node.total_dbs()
-    if total_dbs == 0:
-        click.echo("cluster is empty, setting up cluster")
-        cluster.setup()
+    if total_dbs == 2:
+        logger.info("seeding cluster with 2000 databases...")
         create_seed_data(num_dbs=2000)
         wait_for_sync()
     elif total_dbs == 2000 + 2:

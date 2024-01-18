@@ -1,3 +1,4 @@
+import docker
 from typing import TYPE_CHECKING
 
 import requests
@@ -29,7 +30,13 @@ class Node:
 
     @property
     def private_address(self) -> str:
-        return f"couchdb@{self.container.name}.cluster.local"
+        return f"{self.container.name}.cluster.local"
+
+    def destroy(self):
+        client = docker.from_env()
+        self.container.stop()
+        self.container.remove()
+        client.volumes.get(self.container.name).remove()
 
     def auth(self, username: str, password: str) -> requests.Response:
         logger.debug(f"authenticating as {username}")
