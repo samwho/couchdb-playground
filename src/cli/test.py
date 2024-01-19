@@ -2,7 +2,7 @@ import click
 from couch.cluster import Cluster
 from rich.console import Console
 from tqdm import tqdm
-from utils import no_retries, parallel_iter_with_progress
+from utils import no_retries, parallel_iter_with_progress, parallel_map_with_progress
 
 
 @click.group()
@@ -11,7 +11,7 @@ def test():
 
 
 @test.command()
-@click.option("--num-dbs", default=1000)
+@click.option("--num-dbs", default=500)
 @click.option("--docs-per-db", default=1)
 def lose_data(num_dbs: int, docs_per_db: int):
     cluster = Cluster.current()
@@ -47,26 +47,12 @@ def lose_data(num_dbs: int, docs_per_db: int):
             parallelism=num_dbs,
         )
 
-        empty_dbs = []
-        with tqdm(total=num_dbs) as pbar:
-            pbar.set_description("searching for data loss")
-            for i in range(num_dbs):
-                db_name = f"db-{i}"
-                counts = []
-                for node in cluster.nodes:
-                    counts.append(node.db(db_name).count())
-
-                if all(count == 0 for count in counts):
-                    empty_dbs.append(db_name)
-
-                pbar.update(1)
-
-        if empty_dbs:
-            console.print("data loss detected, following DBs are empty:")
-            console.print(f"  {", ".join(empty_dbs)}")
-            break
-        else:
+        try:
+            cluster.validate_seed(num_dbs, docs_per_db)
             console.print("no data loss detected, retrying...")
+        except Exception as e:
+            console.print(f"detected data loss: {e}")
+            break
 
 
 @test.command()

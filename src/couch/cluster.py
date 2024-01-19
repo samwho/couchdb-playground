@@ -258,9 +258,7 @@ class Cluster(HTTPMixin):
         ):
             total += 1
             if info["info"]["doc_count"] != docs_per_db:
-                raise Exception(
-                    f"db {info['key']} has {info['info']['doc_count']} docs"
-                )
+                raise Exception(f"{info['key']} has {info['info']['doc_count']} docs")
 
         if total != num_dbs:
             raise Exception(f"expected {num_dbs} dbs, got {total}")

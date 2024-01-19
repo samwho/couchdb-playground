@@ -1,16 +1,9 @@
-import threading
-
 import requests
 from couch.credentials import password, username
 from couch.log import logger
 from utils import retry
 
-
-def session() -> requests.Session:
-    local = threading.local()
-    if not hasattr(local, "session"):
-        local.session = requests.Session()
-    return local.session
+session = requests.Session()
 
 
 class HTTPMixin:
@@ -30,15 +23,14 @@ class HTTPMixin:
 
         @retry(max_attempts, initial_wait, backoff_factor)
         def req():
-            print(f"{method} {url}")
-            resp = session().request(method, url, json=json)
+            resp = session.request(method, url, json=json)
             if resp.status_code == 401:
-                resp = session().post(
+                resp = session.post(
                     f"{self.base_url()}/_session",
                     json={"name": username, "password": password},
                 )
                 resp.raise_for_status()
-                resp = session().request(method, url, json=json)
+                resp = session.request(method, url, json=json)
             logger.debug(f"{method} {url} {resp.status_code}")
             if resp.status_code >= 400:
                 logger.debug(f"  body: {resp.text}")
