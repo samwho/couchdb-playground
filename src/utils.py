@@ -3,14 +3,21 @@ import random
 import string
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from datetime import timedelta
 from itertools import islice
 from typing import Callable, Generator, Iterable, Iterator
+from rich.progress import (
+    Progress,
+    TextColumn,
+    BarColumn,
+    MofNCompleteColumn,
+    TimeElapsedColumn,
+)
+from rich.console import Console
 
 from couch.log import logger
-from tqdm import tqdm
 
 
 def parallel_map[T, R](
@@ -20,38 +27,76 @@ def parallel_map[T, R](
         return executor.map(f, iter)
 
 
+def console() -> Console:
+    return Console()
+
+
+def progress(**kwargs) -> Progress:
+    columns = [
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TimeElapsedColumn(),
+    ]
+    return Progress(*columns, expand=True, **kwargs)
+
+
 def parallel_map_with_progress[T, R](
     f: Callable[[T], R], iter: Iterable[T], parallelism=16, description: str = ""
 ) -> Generator[R, None, None]:
     with ThreadPoolExecutor(max_workers=parallelism) as executor:
-        with tqdm() as pbar:
+        with progress() as pbar:
+            task = pbar.add_task(description)
+            total = 0
             futures = []
             for i in iter:
+                total += 1
+                pbar.update(task, total=total)
                 futures.append(executor.submit(f, i))
 
-            pbar.total = len(futures)
-            if description:
-                pbar.set_description(description)
             for future in futures:
-                yield future.result()
-                pbar.update(1)
+                try:
+                    yield future.result()
+                except Exception:
+                    pbar.update(task, description=f"❌ {description}")
+                    raise
+                pbar.update(task, advance=1)
+
+            pbar.update(task, description=f"✅ {description}")
 
 
 def parallel_iter_with_progress[T](
     f: Callable[[T], None], iter: Iterable[T], parallelism=16, description: str = ""
 ):
     with ThreadPoolExecutor(max_workers=parallelism) as executor:
-        with tqdm() as pbar:
+        with progress() as pbar:
+            task = pbar.add_task(description)
             futures = []
+            total = 0
             for i in iter:
+                total += 1
+                pbar.update(task, total=total)
                 futures.append(executor.submit(f, i))
 
-            pbar.total = len(futures)
-            if description:
-                pbar.set_description(description)
-            for future in futures:
-                future.result()
-                pbar.update(1)
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception:
+                    pbar.update(task, description=f"❌ {description}")
+                    raise
+                pbar.update(task, advance=1)
+
+            pbar.update(task, description=f"✅ {description}")
+
+
+def parallel_iter[T](f: Callable[[T], None], iter: Iterable[T], parallelism=16):
+    with ThreadPoolExecutor(max_workers=parallelism) as executor:
+        futures = []
+        for i in iter:
+            futures.append(executor.submit(f, i))
+
+        for future in as_completed(futures):
+            future.result()
 
 
 def random_string(length: int = 6) -> str:

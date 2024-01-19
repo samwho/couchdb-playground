@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from time import sleep
 from typing import TYPE_CHECKING, Any, Generator, Iterable, cast
+from rich.progress import Progress, TaskID
 
 import docker
 import requests
@@ -129,11 +130,9 @@ class Node(HTTPMixin):
 
     def ok(self) -> bool:
         try:
-            self.get("/_up")
+            self.get("/_up", timeout=0.1, max_attempts=1)
             return True
-        except requests.exceptions.ConnectionError:
-            return False
-        except requests.exceptions.HTTPError:
+        except requests.RequestException:
             return False
 
     def membership(self) -> MembershipResponse:
@@ -181,19 +180,49 @@ class Node(HTTPMixin):
     def system(self) -> SystemResponse:
         return self.get("/_node/_local/_system").json()
 
-    def validate_seed(self, num_dbs: int, docs_per_db: int):
+    def validate_seed(
+        self,
+        num_dbs: int,
+        docs_per_db: int,
+        pbar: Progress | None = None,
+        task_id: TaskID | None = None,
+    ):
         total = 0
+        if pbar is not None and task_id is not None:
+            pbar.update(
+                task_id,
+                total=num_dbs,
+                description=f"node:{self.index} validating seed data",
+            )
         for info in self.dbs_info(
             (db.name for db in self.dbs(start_key="db-", end_key="db-\ufff0"))
         ):
+            total += 1
+            if pbar is not None and task_id is not None:
+                pbar.update(task_id, advance=1)
             if "error" in info:
                 continue
-            total += 1
             if info["info"]["doc_count"] != docs_per_db:
+                if pbar is not None and task_id is not None:
+                    pbar.update(
+                        task_id,
+                        description=f"❌ node:{self.index} {info['key']} expected {docs_per_db} docs, got {info['info']['doc_count']}",
+                    )
                 raise Exception(f"{info['key']} has {info['info']['doc_count']} docs")
 
         if total != num_dbs:
+            if pbar is not None and task_id is not None:
+                pbar.update(
+                    task_id,
+                    description=f"❌ node:{self.index} expected {num_dbs} dbs, got {total}",
+                )
             raise Exception(f"expected {num_dbs} dbs, got {total}")
+
+        if pbar is not None and task_id is not None:
+            pbar.update(
+                task_id,
+                description=f"✅ node:{self.index} validated seed data",
+            )
 
     def wait_for_seed(self, num_dbs: int, docs_per_db: int, timeout: int = 60):
         start = datetime.now()
@@ -209,6 +238,8 @@ class Node(HTTPMixin):
                 (db.name for db in self.dbs(start_key="db-", end_key="db-\ufff0"))
             ):
                 total += 1
+                if "error" in info:
+                    continue
                 if info["info"]["doc_count"] != docs_per_db:
                     continue
             if total != num_dbs:

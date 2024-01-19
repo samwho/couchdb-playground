@@ -1,4 +1,5 @@
 import click
+from random import shuffle
 from couch.cluster import Cluster
 from rich.console import Console
 from utils import no_retries, parallel_iter_with_progress
@@ -16,9 +17,12 @@ def lose_data(num_dbs: int, docs_per_db: int):
     cluster = Cluster.current()
     console = Console()
 
+    console.print("🕵️  checking to see if we can re-use existing data...")
     try:
         cluster.validate_seed(num_dbs, docs_per_db)
+        console.print("✅ existing data is valid, re-using")
     except Exception:
+        console.print("❌ existing data is invalid, re-seeding")
         cluster.destroy_seed_data()
         cluster.seed(num_dbs, docs_per_db)
         cluster.wait_for_seed(num_dbs, docs_per_db)
@@ -26,11 +30,15 @@ def lose_data(num_dbs: int, docs_per_db: int):
     while True:
         node = cluster.nodes[-1]
 
-        with console.status(f"destroying node {node.private_address}"):
+        with console.status(
+            f"destroying node:{node.index} ({node.private_address}))..."
+        ):
             node.destroy()
+        console.print(f"✅ destroyed node:{node.index} ({node.private_address}))")
 
-        with console.status("adding new node"):
+        with console.status("adding new node..."):
             node = cluster.add_node()
+        console.print(f"✅ added new node:{node.index} ({node.private_address}))")
 
         def do(i):
             try:
@@ -47,14 +55,13 @@ def lose_data(num_dbs: int, docs_per_db: int):
         )
 
         try:
-            with console.status("waiting for nodes to sync"):
-                cluster.wait_for_seed(num_dbs, docs_per_db, timeout=10)
+            cluster.wait_for_seed(num_dbs, docs_per_db, timeout=10)
         except Exception:
-            pass
+            console.print("❌ failure while syncing")
+            console.print_exception(max_frames=3)
 
         try:
-            with console.status("validating all nodes in sync"):
-                cluster.validate_seed(num_dbs, docs_per_db)
+            cluster.validate_seed(num_dbs, docs_per_db)
             console.print("no data loss detected, retrying...")
         except Exception as e:
             console.print(f"detected data loss: {e}")
@@ -90,18 +97,16 @@ def safely_add_node(unsafe: bool, num_dbs: int, docs_per_db: int):
 
     parallel_iter_with_progress(
         do,
-        range(num_dbs),
+        shuffle(range(num_dbs)),
         description="spamming create db requests to new node",
-        parallelism=num_dbs,
+        parallelism=num_dbs // 4,
     )
 
-    with console.status(f"waiting for node {node.private_address} to catch up"):
-        cluster.wait_for_seed(num_dbs, docs_per_db)
+    cluster.wait_for_seed(num_dbs, docs_per_db)
 
-    with console.status("validating all nodes in sync"):
-        try:
-            cluster.validate_seed(num_dbs, docs_per_db)
-            console.print("all nodes in sync, new node added safely")
-        except Exception as e:
-            console.print(f"detected data loss: {e}")
-            exit(1)
+    try:
+        cluster.validate_seed(num_dbs, docs_per_db)
+        console.print("all nodes in sync, new node added safely")
+    except Exception as e:
+        console.print(f"detected data loss: {e}")
+        exit(1)

@@ -21,10 +21,11 @@ def destroy(index: int):
     console = Console()
     node = cluster.get_node(index)
     if not node:
-        console.print(f"node {index} does not exist")
+        console.print(f"❌ node:{index} does not exist")
         exit(1)
-    with console.status(f"destroying node {index} ({node.private_address}))"):
+    with console.status(f"destroying node {index} ({node.private_address}))..."):
         node.destroy()
+    console.print(f"✅ destroyed node {index} ({node.private_address}))")
 
 
 @node.command()
@@ -34,8 +35,9 @@ def create(count: int, maintenance_mode: bool):
     console = Console()
     cluster = Cluster.current()
     for _ in range(count):
-        with console.status(f"creating node {len(cluster.nodes)}"):
-            cluster.add_node(maintenance_mode=maintenance_mode)
+        with console.status(f"creating node:{len(cluster.nodes)}..."):
+            node = cluster.add_node(maintenance_mode=maintenance_mode)
+        console.print(f"✅ created node:{node.index} ({node.private_address}))")
 
 
 @node.command()
@@ -113,9 +115,12 @@ def logs():
 @click.argument("index", type=int)
 def restart(index: int):
     cluster = Cluster.current()
+    console = Console()
     node = cluster.get_node(index)
     if not node:
-        logger.error(f"node {index} does not exist")
+        console.print(f"❌ node:{index} does not exist")
         exit(1)
-    node.restart()
-    logger.info(f"restarted node {index}")
+
+    with console.status(f"restarting node {index} ({node.private_address}))..."):
+        node.restart()
+    console.print(f"✅ restarted node {index} ({node.private_address}))")

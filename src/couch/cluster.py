@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from random import randint
 from time import sleep
@@ -11,8 +12,10 @@ from docker.models.containers import Container
 from rich.console import Console
 from couch.http import HTTPMixin
 from utils import (
+    parallel_iter,
     parallel_iter_with_progress,
     parallel_map,
+    progress,
     retry,
 )
 
@@ -116,6 +119,7 @@ class Cluster(HTTPMixin):
         max_attempts: int = 3,
         initial_wait: float = 1,
         backoff_factor: float = 2,
+        timeout: float = 5,
     ) -> requests.Response:
         @retry(max_attempts, initial_wait, backoff_factor)
         def req() -> requests.Response:
@@ -124,6 +128,7 @@ class Cluster(HTTPMixin):
                 path,
                 json,
                 max_attempts=1,
+                timeout=timeout,
             )
 
         return req()
@@ -252,12 +257,20 @@ class Cluster(HTTPMixin):
         )
 
     def validate_seed(self, num_dbs: int, docs_per_db: int):
-        for node in self.nodes:
-            node.validate_seed(num_dbs, docs_per_db)
+        with progress() as pbar:
+
+            def do(node: Node):
+                task = pbar.add_task(str(node.index))
+                node.validate_seed(num_dbs, docs_per_db, pbar=pbar, task_id=task)
+
+            parallel_iter(do, self.nodes)
 
     def wait_for_seed(self, num_dbs: int, docs_per_db: int, timeout: int = 60):
+        console = Console()
         for node in self.nodes:
-            node.wait_for_seed(num_dbs, docs_per_db, timeout)
+            with console.status(f"waiting for node:{node.index} to sync..."):
+                node.wait_for_seed(num_dbs, docs_per_db, timeout)
+            console.print(f"✅ node:{node.index} synced")
 
     def destroy_seed_data(self):
         parallel_iter_with_progress(

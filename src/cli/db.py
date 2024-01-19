@@ -35,26 +35,27 @@ def get(name: str):
 @db.command()
 def list():
     cluster = Cluster.current()
-    table = Table(header_style="bold magenta", box=None, show_lines=True)
-    table.add_column("name")
-    table.add_column("docs")
-    table.add_column("q")
-    table.add_column("n")
-    table.add_column("r")
-    table.add_column("w")
-    for info in cluster.dbs_info((db.name for db in cluster.dbs())):
-        if "error" in info:
-            continue
-        table.add_row(
-            info["key"],
-            str(info["info"]["doc_count"]),
-            str(info["info"]["cluster"]["q"]),
-            str(info["info"]["cluster"]["n"]),
-            str(info["info"]["cluster"]["r"]),
-            str(info["info"]["cluster"]["w"]),
-        )
-
     console = Console()
+
+    with console.status("fetching dbs..."):
+        table = Table(header_style="bold magenta", box=None, show_lines=True)
+        table.add_column("name")
+        table.add_column("docs")
+        table.add_column("q")
+        table.add_column("n")
+        table.add_column("r")
+        table.add_column("w")
+        for info in cluster.dbs_info((db.name for db in cluster.dbs())):
+            if "error" in info:
+                continue
+            table.add_row(
+                info["key"],
+                str(info["info"]["doc_count"]),
+                str(info["info"]["cluster"]["q"]),
+                str(info["info"]["cluster"]["n"]),
+                str(info["info"]["cluster"]["r"]),
+                str(info["info"]["cluster"]["w"]),
+            )
     console.print(table)
 
 

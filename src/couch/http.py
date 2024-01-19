@@ -18,22 +18,24 @@ class HTTPMixin:
         max_attempts: int = 3,
         initial_wait: float = 1,
         backoff_factor: float = 2,
+        timeout: float = 5,
     ) -> requests.Response:
         url = f"{self.base_url()}{path}"
 
         @retry(max_attempts, initial_wait, backoff_factor)
         def req():
-            resp = session.request(method, url, json=json)
+            resp = session.request(method, url, json=json, timeout=timeout)
             if resp.status_code == 401:
                 resp = session.post(
                     f"{self.base_url()}/_session",
                     json={"name": username, "password": password},
+                    timeout=5,
                 )
                 resp.raise_for_status()
-                resp = session.request(method, url, json=json)
+                resp = session.request(method, url, json=json, timeout=timeout)
             logger.debug(f"{method} {url} {resp.status_code}")
-            if resp.status_code >= 400:
-                logger.debug(f"  body: {resp.text}")
+            if not resp.ok:
+                logger.debug(resp.text)
             resp.raise_for_status()
             return resp
 
@@ -45,6 +47,7 @@ class HTTPMixin:
         max_attempts: int = 3,
         initial_wait: float = 1,
         backoff_factor: float = 2,
+        timeout: float = 5,
     ) -> requests.Response:
         return self.request(
             "GET",
@@ -53,6 +56,7 @@ class HTTPMixin:
             max_attempts=max_attempts,
             initial_wait=initial_wait,
             backoff_factor=backoff_factor,
+            timeout=timeout,
         )
 
     def post(
@@ -62,9 +66,10 @@ class HTTPMixin:
         max_attempts: int = 3,
         initial_wait: float = 1,
         backoff_factor: float = 2,
+        timeout: float = 5,
     ) -> requests.Response:
         return self.request(
-            "POST", path, json, max_attempts, initial_wait, backoff_factor
+            "POST", path, json, max_attempts, initial_wait, backoff_factor, timeout
         )
 
     def put(
@@ -74,9 +79,10 @@ class HTTPMixin:
         max_attempts: int = 3,
         initial_wait: float = 1,
         backoff_factor: float = 2,
+        timeout: float = 5,
     ) -> requests.Response:
         return self.request(
-            "PUT", path, json, max_attempts, initial_wait, backoff_factor
+            "PUT", path, json, max_attempts, initial_wait, backoff_factor, timeout
         )
 
     def delete(
@@ -85,6 +91,7 @@ class HTTPMixin:
         max_attempts: int = 3,
         initial_wait: float = 1,
         backoff_factor: float = 2,
+        timeout: float = 5,
     ) -> requests.Response:
         return self.request(
             "DELETE",
@@ -93,4 +100,5 @@ class HTTPMixin:
             max_attempts=max_attempts,
             initial_wait=initial_wait,
             backoff_factor=backoff_factor,
+            timeout=timeout,
         )
