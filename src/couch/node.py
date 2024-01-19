@@ -3,19 +3,19 @@ from typing import TYPE_CHECKING, Any, Generator, Iterable, cast
 
 import docker
 import requests
-from couch.log import logger
 from couch.types import DBInfo, MembershipResponse, SystemResponse
 from docker.models.containers import Container
-from utils import batched, random_string, retry
+from couch.http import HTTPMixin
+from utils import batched, random_string
 
-from .credentials import password, session, username
+from .credentials import password, username
 from .db import DB
 
 if TYPE_CHECKING:
     from .cluster import Cluster
 
 
-class Node:
+class Node(HTTPMixin):
     _container: Container
     cluster: "Cluster"
     index: int
@@ -115,13 +115,6 @@ class Node:
         self.cluster.nodes.remove(self)
         self.cluster.reorder_nodes()
 
-    def auth(self, username: str, password: str) -> requests.Response:
-        logger.debug(f"authenticating as {username}")
-        url = f"{self.local_address}/_session"
-        resp = session.post(url, json={"name": username, "password": password})
-        resp.raise_for_status()
-        return resp
-
     def __eq__(self, __value: object) -> bool:
         if not isinstance(__value, Node):
             return False
@@ -130,32 +123,8 @@ class Node:
     def __hash__(self) -> int:
         return hash(self.local_address)
 
-    @retry(max_attempts=2)
-    def request(
-        self, method: str, path: str, json: dict | None = None
-    ) -> requests.Response:
-        url = f"{self.local_address}{path}"
-        resp = session.request(method, url, json=json)
-        if resp.status_code == 401:
-            self.auth(username, password)
-            return self.request(method, path, json)
-        logger.debug(f"{method} {url} {resp.status_code}")
-        if resp.status_code >= 400:
-            logger.debug(f"  body: {resp.text}")
-        resp.raise_for_status()
-        return resp
-
-    def post(self, path: str, json: dict | None = None) -> requests.Response:
-        return self.request("POST", path, json)
-
-    def put(self, path: str, json: dict | None = None) -> requests.Response:
-        return self.request("PUT", path, json)
-
-    def get(self, path: str) -> requests.Response:
-        return self.request("GET", path)
-
-    def delete(self, path: str) -> requests.Response:
-        return self.request("DELETE", path)
+    def base_url(self) -> str:
+        return self.local_address
 
     def ok(self) -> bool:
         try:

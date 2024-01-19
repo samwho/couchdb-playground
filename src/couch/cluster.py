@@ -1,13 +1,20 @@
+from datetime import datetime
 from random import randint
 from time import sleep
-from typing import Any, Generator, Iterable, cast
+from typing import Any, Generator, Iterable, cast, override
 
 import click
 import docker
 import requests
 from couch.log import logger
 from docker.models.containers import Container
-from utils import parallel_iter_with_progress, parallel_map, retry
+from rich.console import Console
+from couch.http import HTTPMixin
+from utils import (
+    parallel_iter_with_progress,
+    parallel_map,
+    retry,
+)
 
 from .credentials import password, username
 from .db import DB
@@ -33,34 +40,33 @@ def get_default_node() -> int | None:
     return _default_node
 
 
-class Cluster:
+class Cluster(HTTPMixin):
     name: str
     nodes: list[Node]
 
     @staticmethod
     def init(name: str, num_nodes: int = 3) -> "Cluster":
+        console = Console()
         client = docker.from_env()
 
         if len(client.networks.list(filters={"label": f"cpg={name}"})) != 0:
             click.echo(f'cluster with name "{name}" already exists')
             exit(1)
 
-        network = client.networks.create(
-            f"cpg-{name}", driver="bridge", labels={"cpg": name}
-        )
-        logger.debug(f"created network {network.name}")  # type: ignore
+        with console.status("creating network..."):
+            client.networks.create(f"cpg-{name}", driver="bridge", labels={"cpg": name})
 
-        nodes = list(parallel_map(lambda _: Node.create(name), range(num_nodes)))
-        cluster = Cluster(name, nodes)
+        with console.status("creating nodes..."):
+            nodes = list(parallel_map(lambda _: Node.create(name), range(num_nodes)))
+            cluster = Cluster(name, nodes)
 
-        logger.debug("waiting for nodes to become healthy...")
-        while not cluster.ok():
-            sleep(0.5)
+        with console.status("waiting for nodes to become healthy..."):
+            while not cluster.ok():
+                sleep(0.5)
 
-        logger.debug("nodes are healthy, setting up cluster...")
-        cluster.setup()
+        with console.status("configuring clustering..."):
+            cluster.setup()
 
-        logger.debug("cluster setup complete!")
         return cluster
 
     @staticmethod
@@ -100,6 +106,27 @@ class Cluster:
         if _default_node is None:
             return self.nodes[randint(0, len(self.nodes) - 1)]
         return self.nodes[_default_node]
+
+    @override
+    def request(
+        self,
+        method: str,
+        path: str,
+        json: dict | None = None,
+        max_attempts: int = 3,
+        initial_wait: float = 1,
+        backoff_factor: float = 2,
+    ) -> requests.Response:
+        @retry(max_attempts, initial_wait, backoff_factor)
+        def req() -> requests.Response:
+            return self.default_node.request(
+                method,
+                path,
+                json,
+                max_attempts=1,
+            )
+
+        return req()
 
     def setup(self):
         if self.is_setup():
@@ -160,22 +187,6 @@ class Cluster:
             if not a.endswith(e):
                 return False
         return len(actual) == len(self.nodes)
-
-    @retry()
-    def post(self, path: str, json: dict | None = None) -> requests.Response:
-        return self.default_node.post(path, json)
-
-    @retry()
-    def put(self, path: str, json: dict | None = None) -> requests.Response:
-        return self.default_node.put(path, json)
-
-    @retry()
-    def get(self, path: str) -> requests.Response:
-        return self.default_node.get(path)
-
-    @retry()
-    def delete(self, path: str) -> requests.Response:
-        return self.default_node.delete(path)
 
     def db(self, name: str) -> DB:
         return self.default_node.db(name)
@@ -254,8 +265,14 @@ class Cluster:
         if total != num_dbs:
             raise Exception(f"expected {num_dbs} dbs, got {total}")
 
-    def wait_for_seed(self, num_dbs: int, docs_per_db: int):
+    def wait_for_seed(self, num_dbs: int, docs_per_db: int, timeout: int = 60):
+        start = datetime.now()
         while True:
+            elapsed = (datetime.now() - start).total_seconds()
+            if elapsed > timeout:
+                raise Exception(
+                    f"timed out waiting for seed data to be created (elapsed={elapsed}s)"
+                )
             sleep(0.5)
             total = 0
             for info in self.dbs_info(

@@ -12,15 +12,6 @@ def clster():
 
 
 @clster.command()
-def setup():
-    cluster = Cluster.current()
-    if cluster.is_setup():
-        click.echo("cluster is setup")
-        return
-    cluster.setup()
-
-
-@clster.command()
 def membership():
     cluster = Cluster.current()
 
@@ -101,15 +92,21 @@ def init(name: str, nodes: int):
 @click.argument("name", default="default")
 def destroy(name: str):
     client = docker.from_env()
+    console = Console()
     filters = {"label": f"cpg={name}"}
 
-    parallel_map(lambda c: c.stop(), client.containers.list(filters=filters))  # type: ignore
-    client.containers.prune(filters=filters)
+    with console.status("stopping nodes..."):
+        parallel_map(lambda c: c.stop(), client.containers.list(filters=filters))  # type: ignore
 
-    parallel_map(lambda v: v.remove(), client.volumes.list(filters=filters))  # type: ignore
-    client.volumes.prune(filters=filters)
+    with console.status("removing nodes..."):
+        client.containers.prune(filters=filters)
 
-    client.networks.prune(filters=filters)
+    with console.status("deleting volumes..."):
+        parallel_map(lambda v: v.remove(), client.volumes.list(filters=filters))  # type: ignore
+        client.volumes.prune(filters=filters)
+
+    with console.status("deleting network..."):
+        client.networks.prune(filters=filters)
 
 
 @clster.command("list")

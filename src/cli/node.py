@@ -6,7 +6,7 @@ from couch.log import logger
 from couch.node import Node
 from rich.console import Console
 from rich.table import Table
-from utils import duration_to_human
+from utils import duration_to_human, no_retries
 
 
 @click.group()
@@ -18,22 +18,24 @@ def node():
 @click.argument("index", type=int)
 def destroy(index: int):
     cluster = Cluster.current()
+    console = Console()
     node = cluster.get_node(index)
     if not node:
-        logger.error(f"node {index} does not exist")
+        console.print(f"node {index} does not exist")
         exit(1)
-    node.destroy()
-    logger.info(f"destroyed node {index}")
+    with console.status(f"destroying node {index} ({node.private_address}))"):
+        node.destroy()
 
 
 @node.command()
 @click.option("--count", default=1)
 @click.option("--maintenance-mode", "-m", is_flag=True, default=False)
 def create(count: int, maintenance_mode: bool):
+    console = Console()
     cluster = Cluster.current()
     for _ in range(count):
-        node = cluster.add_node(maintenance_mode=maintenance_mode)
-        logger.info(f"created node {node.name}")
+        with console.status(f"creating node {len(cluster.nodes)}"):
+            cluster.add_node(maintenance_mode=maintenance_mode)
 
 
 @node.command()
@@ -51,7 +53,10 @@ def list():
     table.add_column("address")
     table.add_column("ok")
     for i, node in enumerate(cluster.nodes):
-        ok = "✅" if node.ok() else "❌"
+        ok = "✅"
+        with no_retries():
+            if not node.ok():
+                ok = "❌"
         table.add_row(
             str(i),
             duration_to_human(node.uptime()),

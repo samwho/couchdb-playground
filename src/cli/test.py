@@ -1,10 +1,8 @@
-from threading import Thread
-
 import click
-import requests
 from couch.cluster import Cluster
-from couch.log import logger
+from rich.console import Console
 from tqdm import tqdm
+from utils import no_retries, parallel_iter_with_progress
 
 
 @click.group()
@@ -13,46 +11,41 @@ def test():
 
 
 @test.command()
-@click.option("--num-dbs", default=100)
-def lose_data(num_dbs: int):
+@click.option("--num-dbs", default=1000)
+@click.option("--docs-per-db", default=1)
+def lose_data(num_dbs: int, docs_per_db: int):
     cluster = Cluster.current()
-    node = cluster.default_node
-    total_dbs = node.total_dbs()
-    if total_dbs == 2:
-        cluster.seed(num_dbs, 1)
-        cluster.wait_for_seed(num_dbs, 1)
-    elif total_dbs == num_dbs + 2:
-        logger.info(
-            "cluster is already setup, making sure all dbs have 1 document in them..."
-        )
-        try:
-            cluster.validate_seed(num_dbs, 1)
-        except Exception as e:
-            logger.error(f"cluster not valid: {e}")
-            exit(1)
-    else:
-        logger.error("must run against a fresh cluster, found existing dbs, exiting")
-        exit(1)
+    console = Console()
+
+    try:
+        cluster.validate_seed(num_dbs, docs_per_db)
+    except Exception:
+        cluster.destroy_seed_data()
+        cluster.seed(num_dbs, docs_per_db)
+        cluster.wait_for_seed(num_dbs, docs_per_db)
 
     while True:
         node = cluster.nodes[-1]
-        logger.info(f"simulating a node failure by destroying {node.private_address}")
 
-        node.destroy()
-        node = cluster.add_node()
+        with console.status(f"destroying node {node.private_address}"):
+            node.destroy()
 
-        logger.info(f"added new node {node.private_address}")
+        with console.status("adding new node"):
+            node = cluster.add_node()
 
-        logger.info("spamming DB creations...")
-
-        with tqdm(total=num_dbs) as pbar:
-            pbar.set_description("spamming new node with DB creations")
-            for i in range(num_dbs):
-                try:
+        def do(i):
+            try:
+                with no_retries():
                     node.db(f"db-{i}").create()
-                except requests.exceptions.HTTPError:
-                    pass
-                pbar.update(1)
+            except Exception:
+                pass
+
+        parallel_iter_with_progress(
+            do,
+            range(num_dbs),
+            description="spamming create db requests to new node",
+            parallelism=num_dbs,
+        )
 
         empty_dbs = []
         with tqdm(total=num_dbs) as pbar:
@@ -69,29 +62,48 @@ def lose_data(num_dbs: int):
                 pbar.update(1)
 
         if empty_dbs:
-            logger.error("data loss detected, following DBs are empty:")
-            logger.error(f"  {", ".join(empty_dbs)}")
+            console.print("data loss detected, following DBs are empty:")
+            console.print(f"  {", ".join(empty_dbs)}")
             break
         else:
-            logger.info("no data loss detected, retrying...")
+            console.print("no data loss detected, retrying...")
 
 
 @test.command()
-def safely_add_node():
+@click.option("--unsafe", default=False, is_flag=True)
+@click.option("--num-dbs", default=1000)
+@click.option("--docs-per-db", default=1)
+def safely_add_node(unsafe: bool, num_dbs: int, docs_per_db: int):
     cluster = Cluster.current()
-    if cluster.db("db-0").exists():
+    console = Console()
+
+    try:
+        cluster.validate_seed(num_dbs, docs_per_db)
+    except Exception:
         cluster.destroy_seed_data()
+        cluster.seed(num_dbs, docs_per_db)
+        cluster.wait_for_seed(num_dbs, docs_per_db)
 
-    def seed():
-        cluster.seed(2000, 10)
+    with console.status(f"adding new node (maintenance_mode={not unsafe}))"):
+        node = cluster.add_node(maintenance_mode=not unsafe)
+        if not unsafe:
+            node.set_config("couchdb", "maintenance_mode", "false")
 
-    thread = Thread(target=seed)
-    thread.start()
+    def do(i):
+        try:
+            with no_retries():
+                node.db(f"db-{i}").create()
+        except Exception:
+            pass
 
-    node = cluster.add_node(maintenance_mode=True)
+    parallel_iter_with_progress(
+        do,
+        range(num_dbs),
+        description="spamming create db requests to new node",
+    )
 
-    thread.join()
+    with console.status(f"waiting for node {node.private_address} to catch up"):
+        cluster.wait_for_seed(num_dbs, docs_per_db)
 
-    node.set_config("couchdb", "maintenance_mode", "false")
-
-    cluster.wait_for_seed(2000, 10)
+    with console.status("validating all nodes in sync"):
+        cluster.validate_seed(num_dbs, docs_per_db)

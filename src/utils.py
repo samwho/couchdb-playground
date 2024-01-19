@@ -1,12 +1,15 @@
 import functools
 import random
 import string
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from datetime import timedelta
 from itertools import islice
 from typing import Callable, Generator, Iterable, Iterator
 
+from couch.log import logger
 from tqdm import tqdm
 
 
@@ -88,7 +91,28 @@ def duration_to_human(delta: timedelta) -> str:
         return f"{seconds / 60 / 60 / 24:.0f}d"
 
 
-def retry(max_attempts=3, initial_wait=1, backoff_factor=2):
+def retries_enabled() -> bool:
+    local = threading.local()
+    if not hasattr(local, "retries_enabled"):
+        local.retries_enabled = True
+    return local.retries_enabled
+
+
+def disable_retries():
+    local = threading.local()
+    if not hasattr(local, "retries_enabled"):
+        local.retries_enabled = True
+    local.retries_enabled = False
+
+
+def enable_retries():
+    local = threading.local()
+    if not hasattr(local, "retries_enabled"):
+        local.retries_enabled = True
+    local.retries_enabled = True
+
+
+def retry(max_attempts: int = 3, initial_wait: float = 1, backoff_factor: float = 2):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -99,7 +123,11 @@ def retry(max_attempts=3, initial_wait=1, backoff_factor=2):
                     return func(*args, **kwargs)
                 except Exception:
                     attempts += 1
+                    if not retries_enabled():
+                        logger.debug("retries disabled, not retrying")
+                        raise
                     if attempts == max_attempts:
+                        logger.debug("max retries reached, not retrying")
                         raise
                     time.sleep(wait_time + random.uniform(0, wait_time))
                     wait_time *= backoff_factor
@@ -107,3 +135,16 @@ def retry(max_attempts=3, initial_wait=1, backoff_factor=2):
         return wrapper
 
     return decorator
+
+
+@contextmanager
+def no_retries():
+    prev = retries_enabled()
+    disable_retries()
+    try:
+        yield
+    finally:
+        if prev:
+            enable_retries()
+        else:
+            disable_retries()
