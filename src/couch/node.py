@@ -63,16 +63,22 @@ class Node:
 
     @property
     def name(self) -> str:
-        return self.container.name # type: ignore
+        return self.container.name  # type: ignore
 
-    def get_config(self, section: str, key: str) -> Any:
-        return self.cluster.get(f"/_node/_local/_config/{section}/{key}").json()
-    
+    def get_config(self, section: str, key: str | None = None) -> Any:
+        if key:
+            return self.get(f"/_node/_local/_config/{section}/{key}").json()
+        else:
+            return self.get(f"/_node/_local/_config/{section}").json()
+
     def set_config(self, section: str, key: str, value: Any) -> None:
-        self.cluster.put(f"/_node/_local/_config/{section}/{key}", json=value)
+        self.put(f"/_node/_local/_config/{section}/{key}", json=value)
+
+    def config(self) -> dict[str, Any]:
+        return self.get("/_node/_local/_config").json()
 
     def started_at(self) -> datetime:
-        started_at = self.container.attrs["State"]["StartedAt"] # type: ignore
+        started_at = self.container.attrs["State"]["StartedAt"]  # type: ignore
         return datetime.fromisoformat(started_at[:-4])
 
     def uptime(self) -> timedelta:
@@ -90,14 +96,22 @@ class Node:
         self.container.remove()
 
         if not keep_data:
-            client.volumes.get(self.container.name).remove() # type: ignore
+            client.volumes.get(self.container.name).remove()  # type: ignore
 
     def remove(self):
-        resp = self.cluster.get(f"/_node/_local/_nodes/couchdb@{self.private_address}")
-        rev = resp.json()["_rev"]
-        self.cluster.delete(
-            f"/_node/_local/_nodes/couchdb@{self.private_address}?rev={rev}"
-        )
+        try:
+            resp = self.cluster.get(
+                f"/_node/_local/_nodes/couchdb@{self.private_address}"
+            )
+            rev = resp.json()["_rev"]
+            self.cluster.delete(
+                f"/_node/_local/_nodes/couchdb@{self.private_address}?rev={rev}"
+            )
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:
+                pass
+            else:
+                raise e
         self.cluster.nodes.remove(self)
         self.cluster.reorder_nodes()
 
@@ -148,6 +162,8 @@ class Node:
             return True
         except requests.exceptions.ConnectionError:
             return False
+        except requests.exceptions.HTTPError:
+            return False
 
     def membership(self) -> MembershipResponse:
         resp = self.get("/_membership")
@@ -161,13 +177,18 @@ class Node:
     def db(self, name: str) -> DB:
         return DB(self, name)
 
-    def dbs(self, page_size: int = 100, start_key: str | None = None, end_key: str | None = None) -> Generator[DB, None, None]:
+    def dbs(
+        self,
+        page_size: int = 100,
+        start_key: str | None = None,
+        end_key: str | None = None,
+    ) -> Generator[DB, None, None]:
         while True:
             url = f"/_all_dbs?limit={page_size + 1}"
             if start_key:
-                url += f"&startkey=\"{start_key}\""
+                url += f'&startkey="{start_key}"'
             if end_key:
-                url += f"&endkey=\"{end_key}\""
+                url += f'&endkey="{end_key}"'
             names = self.get(url).json()
 
             for name in names[:page_size]:
@@ -178,7 +199,9 @@ class Node:
             else:
                 break
 
-    def dbs_info(self, db_names: Iterable[str], page_size: int = 100) -> Generator[DBInfo, None, None]:
+    def dbs_info(
+        self, db_names: Iterable[str], page_size: int = 100
+    ) -> Generator[DBInfo, None, None]:
         for batch in batched(db_names, page_size):
             infos: list[DBInfo] = self.post("/_dbs_info", json={"keys": batch}).json()
             for info in infos:

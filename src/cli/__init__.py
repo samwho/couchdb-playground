@@ -12,6 +12,7 @@ from .http import http
 from .test import test
 from .node import node
 from .seed import seed
+from .config import config
 
 
 @click.group()
@@ -34,3 +35,4 @@ main.add_command(clster)
 main.add_command(http)
 main.add_command(node)
 main.add_command(seed)
+main.add_command(config)

@@ -1,5 +1,5 @@
 from time import sleep
-from typing import Generator, Iterable, cast
+from typing import Any, Generator, Iterable, cast
 
 import click
 import docker
@@ -178,6 +178,15 @@ class Cluster:
     ) -> Generator[DBInfo, None, None]:
         return self.default_node.dbs_info(db_names, page_size)
 
+    def config(self) -> dict[str, str]:
+        return self.default_node.config()
+
+    def get_config(self, section: str, key: str | None = None) -> Any:
+        return self.default_node.get_config(section, key)
+
+    def set_config(self, section: str, key: str, value: str) -> None:
+        return self.default_node.set_config(section, key, value)
+
     def membership(self) -> MembershipResponse:
         resp = self.get("/_membership")
         return resp.json()
@@ -187,11 +196,14 @@ class Cluster:
             return None
         return self.nodes[i]
 
-    def add_node(self) -> Node:
+    def add_node(self, maintenance_mode: bool = False) -> Node:
         new_node = Node.create(self.name)
+        new_node.reload()
+
+        if maintenance_mode:
+            new_node.set_config("couchdb", "maintenance_mode", "true")
         self.put(f"/_node/_local/_nodes/couchdb@{new_node.private_address}", json={})
 
-        new_node.reload()
         for node in self.nodes:
             try:
                 new_node.put(

@@ -25,10 +25,11 @@ def destroy(index: int):
 
 @node.command()
 @click.option("--count", default=1)
-def create(count: int):
+@click.option("--maintenance-mode", "-m", is_flag=True, default=False)
+def create(count: int, maintenance_mode: bool):
     cluster = Cluster.current()
     for _ in range(count):
-        node = cluster.add_node()
+        node = cluster.add_node(maintenance_mode=maintenance_mode)
         logger.info(f"created node {node.name}")
 
 
@@ -49,7 +50,11 @@ def list():
     for i, node in enumerate(cluster.nodes):
         ok = "✅" if node.ok() else "❌"
         table.add_row(
-            str(i), duration_to_human(node.uptime()), node.container.name, node.local_address, ok
+            str(i),
+            duration_to_human(node.uptime()),
+            node.container.name,
+            node.local_address,
+            ok,
         )
 
     console = Console()

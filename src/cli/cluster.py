@@ -1,9 +1,8 @@
 import click
 import docker
 from couch.cluster import Cluster
-from rich.table import Table
 from rich.console import Console
-
+from rich.table import Table
 from utils import parallel_map
 
 
@@ -104,17 +103,17 @@ def destroy(name: str):
     client = docker.from_env()
     filters = {"label": f"cpg={name}"}
 
-    parallel_map(lambda c: c.stop(), client.containers.list(filters=filters))
+    parallel_map(lambda c: c.stop(), client.containers.list(filters=filters))  # type: ignore
     client.containers.prune(filters=filters)
 
-    parallel_map(lambda v: v.remove(), client.volumes.list(filters=filters))
+    parallel_map(lambda v: v.remove(), client.volumes.list(filters=filters))  # type: ignore
     client.volumes.prune(filters=filters)
 
     client.networks.prune(filters=filters)
 
 
-@clster.command()
-def list():
+@clster.command("list")
+def ls():
     client = docker.from_env()
     table = Table(
         show_header=True,
@@ -127,8 +126,8 @@ def list():
     table.add_column("nodes")
 
     for network in client.networks.list():
-        if network.attrs["Labels"].get("cpg"):
-            name = network.name.split("-")[1]
+        if network.attrs["Labels"].get("cpg"):  # type: ignore
+            name = network.name.split("-")[1]  # type: ignore
             cluster = Cluster.from_name(name)
             table.add_row(name, str(len(cluster.nodes)))
 
