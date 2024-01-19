@@ -70,7 +70,7 @@ def safely_add_node(unsafe: bool, num_dbs: int, docs_per_db: int):
         cluster.seed(num_dbs, docs_per_db)
         cluster.wait_for_seed(num_dbs, docs_per_db)
 
-    with console.status(f"adding new node (maintenance_mode={not unsafe}))"):
+    with console.status(f"adding new node (maintenance_mode={not unsafe})"):
         node = cluster.add_node(maintenance_mode=not unsafe)
         if not unsafe:
             node.set_config("couchdb", "maintenance_mode", "false")
@@ -86,10 +86,16 @@ def safely_add_node(unsafe: bool, num_dbs: int, docs_per_db: int):
         do,
         range(num_dbs),
         description="spamming create db requests to new node",
+        parallelism=num_dbs,
     )
 
     with console.status(f"waiting for node {node.private_address} to catch up"):
         cluster.wait_for_seed(num_dbs, docs_per_db)
 
     with console.status("validating all nodes in sync"):
-        cluster.validate_seed(num_dbs, docs_per_db)
+        try:
+            cluster.validate_seed(num_dbs, docs_per_db)
+            console.print("all nodes in sync, new node added safely")
+        except Exception as e:
+            console.print(f"detected data loss: {e}")
+            exit(1)
