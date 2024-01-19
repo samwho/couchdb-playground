@@ -2,7 +2,6 @@ from threading import Thread
 
 import click
 from couch.cluster import Cluster, get_default_node
-from couch.log import logger
 from couch.node import Node
 from rich.console import Console
 from rich.table import Table
@@ -31,12 +30,13 @@ def destroy(index: int):
 @node.command()
 @click.option("--count", default=1)
 @click.option("--maintenance-mode", "-m", is_flag=True, default=False)
-def create(count: int, maintenance_mode: bool):
+@click.option("--image", default=None, type=str)
+def create(count: int, maintenance_mode: bool, image: str):
     console = Console()
     cluster = Cluster.current()
     for _ in range(count):
         with console.status(f"creating node:{len(cluster.nodes)}..."):
-            node = cluster.add_node(maintenance_mode=maintenance_mode)
+            node = cluster.add_node(maintenance_mode=maintenance_mode, image=image)
         console.print(f"✅ created node:{node.index} ({node.private_address}))")
 
 
@@ -53,6 +53,7 @@ def list():
     table.add_column("uptime")
     table.add_column("name")
     table.add_column("address")
+    table.add_column("image")
     table.add_column("ok")
     for i, node in enumerate(cluster.nodes):
         ok = "✅"
@@ -64,6 +65,7 @@ def list():
             duration_to_human(node.uptime()),
             node.container.name,
             node.local_address,
+            node.image,
             ok,
         )
 

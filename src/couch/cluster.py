@@ -48,7 +48,7 @@ class Cluster(HTTPMixin):
     nodes: list[Node]
 
     @staticmethod
-    def init(name: str, num_nodes: int = 3) -> "Cluster":
+    def init(name: str, num_nodes: int = 3, image: str = "couchdb:3.2.1") -> "Cluster":
         console = Console()
         client = docker.from_env()
 
@@ -60,7 +60,9 @@ class Cluster(HTTPMixin):
             client.networks.create(f"cpg-{name}", driver="bridge", labels={"cpg": name})
 
         with console.status("creating nodes..."):
-            nodes = list(parallel_map(lambda _: Node.create(name), range(num_nodes)))
+            nodes = list(
+                parallel_map(lambda _: Node.create(name, image=image), range(num_nodes))
+            )
             cluster = Cluster(name, nodes)
 
         with console.status("waiting for nodes to become healthy..."):
@@ -224,8 +226,12 @@ class Cluster(HTTPMixin):
             return None
         return self.nodes[i]
 
-    def add_node(self, maintenance_mode: bool = False) -> Node:
-        new_node = Node.create(self.name)
+    def add_node(
+        self, maintenance_mode: bool = False, image: str | None = None
+    ) -> Node:
+        if image is None:
+            image = self.nodes[0].image
+        new_node = Node.create(self.name, image=image)
         new_node.reload()
 
         if maintenance_mode:

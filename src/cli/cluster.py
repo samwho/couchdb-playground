@@ -84,8 +84,9 @@ def membership():
 @clster.command()
 @click.argument("name", default="default")
 @click.option("--nodes", default=3)
-def init(name: str, nodes: int):
-    Cluster.init(name, num_nodes=nodes)
+@click.option("--image", default="couchdb:3.2.1")
+def init(name: str, nodes: int, image: str):
+    Cluster.init(name, num_nodes=nodes, image=image)
 
 
 @clster.command()

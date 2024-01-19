@@ -29,15 +29,19 @@ class Node(HTTPMixin):
     def reload(self):
         self.container.reload()
 
+    @property
+    def image(self) -> str:
+        return self.container.image.tags[0]
+
     @staticmethod
-    def create(cluster_name: str) -> "Node":
+    def create(cluster_name: str, image: str = "couchdb:3.2.1") -> "Node":
         client = docker.from_env()
         id = random_string()
         node_name = f"cpg-{cluster_name}-{id}"
         client.volumes.create(name=node_name, labels={"cpg": cluster_name})
 
         container = client.containers.run(
-            "couchdb:3.2",
+            image,
             name=node_name,
             hostname=f"{node_name}.cluster.local",
             detach=True,

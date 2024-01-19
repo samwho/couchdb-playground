@@ -1,6 +1,5 @@
 import click
 from couch.cluster import Cluster
-from couch.log import logger
 
 
 @click.group()
@@ -25,8 +24,7 @@ def validate(num_dbs: int, docs_per_db: int):
 
     try:
         cluster.validate_seed(num_dbs, docs_per_db)
-    except Exception as e:
-        logger.error(f"cluster not valid: {e}")
+    except Exception:
         exit(1)
 
 
