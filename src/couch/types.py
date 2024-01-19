@@ -32,6 +32,10 @@ class DatabaseResponse(TypedDict):
     instance_start_time: str
     cluster: ClusterOpts
 
+class DBInfo(TypedDict):
+    key: str
+    info: DatabaseResponse
+
 
 class MemoryInfo(TypedDict):
     other: int

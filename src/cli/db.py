@@ -1,10 +1,11 @@
 import json
 
 import click
-from tqdm import tqdm
 from couch.cluster import Cluster
 from rich.console import Console
+from rich.syntax import Syntax
 from rich.table import Table
+from utils import parallel_iter_with_progress
 
 
 @click.group()
@@ -18,7 +19,7 @@ def db():
 @click.option("--n", default=2)
 def create(name: str, q: int, n: int):
     cluster = Cluster.current()
-    db = cluster.create_db(name, q=q, n=n)
+    db = cluster.db(name).create(q=q, n=n)
     click.echo(f"created db {db}")
 
 
@@ -26,7 +27,9 @@ def create(name: str, q: int, n: int):
 @click.argument("name")
 def get(name: str):
     cluster = Cluster.current()
-    click.echo(json.dumps(cluster.db(name).get(), indent=2))
+    output = json.dumps(cluster.db(name).describe(), indent=2)
+    console = Console()
+    console.print(Syntax(output, "json"))
 
 
 @db.command()
@@ -39,15 +42,14 @@ def list():
     table.add_column("n")
     table.add_column("r")
     table.add_column("w")
-    for db in cluster.dbs():
-        info = db.get()
+    for info in cluster.dbs_info((db.name for db in cluster.dbs())):
         table.add_row(
-            db.name,
-            str(info["doc_count"]),
-            str(info["cluster"]["q"]),
-            str(info["cluster"]["n"]),
-            str(info["cluster"]["r"]),
-            str(info["cluster"]["w"]),
+            info["key"],
+            str(info["info"]["doc_count"]),
+            str(info["info"]["cluster"]["q"]),
+            str(info["info"]["cluster"]["n"]),
+            str(info["info"]["cluster"]["r"]),
+            str(info["info"]["cluster"]["w"]),
         )
 
     console = Console()
@@ -58,14 +60,17 @@ def list():
 @click.argument("name")
 def delete(name: str):
     cluster = Cluster.current()
-    cluster.db(name).delete()
+    cluster.db(name).destroy()
     click.echo(f"deleted db {name}")
 
 
 @db.command()
 def delete_all():
     cluster = Cluster.current()
-    for db in tqdm(cluster.dbs()):
+
+    def destroy(db):
         if db.name.startswith("_"):
-            continue
-        db.delete()
+            return
+        db.destroy()
+
+    parallel_iter_with_progress(destroy, cluster.dbs())

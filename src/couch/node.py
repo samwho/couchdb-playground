@@ -1,13 +1,12 @@
 from datetime import datetime, timedelta
-import docker
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Generator, Iterable, cast
 
+import docker
 import requests
 from couch.log import logger
-from couch.types import MembershipResponse, SystemResponse
+from couch.types import DBInfo, MembershipResponse, SystemResponse
 from docker.models.containers import Container
-
-from utils import random_string
+from utils import batched, random_string
 
 from .credentials import password, session, username
 from .db import DB
@@ -17,7 +16,7 @@ if TYPE_CHECKING:
 
 
 class Node:
-    container: Container
+    _container: Container
     cluster: "Cluster"
     index: int
 
@@ -51,7 +50,7 @@ class Node:
             },
         )
 
-        return Node(0, container)
+        return Node(0, cast(Container, container))
 
     @property
     def local_address(self) -> str:
@@ -64,10 +63,16 @@ class Node:
 
     @property
     def name(self) -> str:
-        return self.container.name
+        return self.container.name # type: ignore
+
+    def get_config(self, section: str, key: str) -> Any:
+        return self.cluster.get(f"/_node/_local/_config/{section}/{key}").json()
+    
+    def set_config(self, section: str, key: str, value: Any) -> None:
+        self.cluster.put(f"/_node/_local/_config/{section}/{key}", json=value)
 
     def started_at(self) -> datetime:
-        started_at = self.container.attrs["State"]["StartedAt"]
+        started_at = self.container.attrs["State"]["StartedAt"] # type: ignore
         return datetime.fromisoformat(started_at[:-4])
 
     def uptime(self) -> timedelta:
@@ -85,7 +90,7 @@ class Node:
         self.container.remove()
 
         if not keep_data:
-            client.volumes.get(self.container.name).remove()
+            client.volumes.get(self.container.name).remove() # type: ignore
 
     def remove(self):
         resp = self.cluster.get(f"/_node/_local/_nodes/couchdb@{self.private_address}")
@@ -153,15 +158,31 @@ class Node:
         body = resp.json()
         return body["doc_count"]
 
-    def create_db(self, name: str, q: int = 2, n: int = 2) -> DB:
-        self.put(f"/{name}?q={q}&n={n}")
-        return DB(self.cluster, name)
-
     def db(self, name: str) -> DB:
-        return DB(self.cluster, name)
+        return DB(self, name)
 
-    def dbs(self) -> list[DB]:
-        return [DB(self.cluster, name) for name in self.get("/_all_dbs").json()]
+    def dbs(self, page_size: int = 100, start_key: str | None = None, end_key: str | None = None) -> Generator[DB, None, None]:
+        while True:
+            url = f"/_all_dbs?limit={page_size + 1}"
+            if start_key:
+                url += f"&startkey=\"{start_key}\""
+            if end_key:
+                url += f"&endkey=\"{end_key}\""
+            names = self.get(url).json()
+
+            for name in names[:page_size]:
+                yield DB(self, name)
+
+            if len(names) == page_size + 1:
+                start_key = names[-1]
+            else:
+                break
+
+    def dbs_info(self, db_names: Iterable[str], page_size: int = 100) -> Generator[DBInfo, None, None]:
+        for batch in batched(db_names, page_size):
+            infos: list[DBInfo] = self.post("/_dbs_info", json={"keys": batch}).json()
+            for info in infos:
+                yield info
 
     def system(self) -> SystemResponse:
         return self.get("/_node/_local/_system").json()

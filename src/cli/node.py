@@ -1,21 +1,9 @@
-from datetime import timedelta
 import click
 from couch.cluster import Cluster
 from couch.log import logger
-from rich.table import Table
 from rich.console import Console
-
-
-def to_human(delta: timedelta) -> str:
-    seconds = delta.total_seconds()
-    if seconds < 60:
-        return f"{seconds:.0f}s"
-    elif seconds < 60 * 60:
-        return f"{seconds / 60:.0f}m"
-    elif seconds < 60 * 60 * 24:
-        return f"{seconds / 60 / 60:.0f}h"
-    else:
-        return f"{seconds / 60 / 60 / 24:.0f}d"
+from rich.table import Table
+from utils import duration_to_human
 
 
 @click.group()
@@ -27,7 +15,11 @@ def node():
 @click.argument("index", type=int)
 def destroy(index: int):
     cluster = Cluster.current()
-    cluster.get_node(index).destroy()
+    node = cluster.get_node(index)
+    if not node:
+        logger.error(f"node {index} does not exist")
+        exit(1)
+    node.destroy()
     logger.info(f"destroyed node {index}")
 
 
@@ -57,7 +49,7 @@ def list():
     for i, node in enumerate(cluster.nodes):
         ok = "✅" if node.ok() else "❌"
         table.add_row(
-            str(i), to_human(node.uptime()), node.container.name, node.local_address, ok
+            str(i), duration_to_human(node.uptime()), node.container.name, node.local_address, ok
         )
 
     console = Console()
@@ -69,6 +61,9 @@ def list():
 def logs(index: int):
     cluster = Cluster.current()
     node = cluster.get_node(index)
+    if not node:
+        logger.error(f"node {index} does not exist")
+        exit(1)
 
     for chunk in node.container.logs(stream=True):
         print(chunk.decode("utf-8"), end="")
@@ -79,5 +74,8 @@ def logs(index: int):
 def restart(index: int):
     cluster = Cluster.current()
     node = cluster.get_node(index)
+    if not node:
+        logger.error(f"node {index} does not exist")
+        exit(1)
     node.restart()
     logger.info(f"restarted node {index}")

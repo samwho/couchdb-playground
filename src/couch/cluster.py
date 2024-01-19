@@ -1,19 +1,17 @@
-from concurrent.futures import Future, ThreadPoolExecutor
 from time import sleep
-from typing import cast
+from typing import Generator, Iterable, cast
 
 import click
 import docker
 import requests
 from couch.log import logger
 from docker.models.containers import Container
-
-from utils import parallel_map
+from utils import parallel_iter_with_progress, parallel_map
 
 from .credentials import password, username
 from .db import DB
 from .node import Node
-from .types import MembershipResponse
+from .types import DBInfo, MembershipResponse
 
 _current_cluster = "default"
 _default_node = 0
@@ -48,10 +46,15 @@ class Cluster:
 
         nodes = list(parallel_map(lambda _: Node.create(name), range(num_nodes)))
         cluster = Cluster(name, nodes)
-        while not cluster.ok():
-            sleep(1)
 
+        logger.debug("waiting for nodes to become healthy...")
+        while not cluster.ok():
+            sleep(0.5)
+
+        logger.debug("nodes are healthy, setting up cluster...")
         cluster.setup()
+
+        logger.debug("cluster setup complete!")
         return cluster
 
     @staticmethod
@@ -165,14 +168,23 @@ class Cluster:
     def db(self, name: str) -> DB:
         return self.default_node.db(name)
 
-    def dbs(self) -> list[DB]:
-        return self.default_node.dbs()
+    def dbs(
+        self, limit: int = 100, start_key: str | None = None, end_key: str | None = None
+    ) -> Generator[DB, None, None]:
+        return self.default_node.dbs(limit, start_key, end_key)
+
+    def dbs_info(
+        self, db_names: Iterable[str], page_size: int = 100
+    ) -> Generator[DBInfo, None, None]:
+        return self.default_node.dbs_info(db_names, page_size)
 
     def membership(self) -> MembershipResponse:
         resp = self.get("/_membership")
         return resp.json()
 
     def get_node(self, i: int) -> Node | None:
+        if i < 0 or i >= len(self.nodes):
+            return None
         return self.nodes[i]
 
     def add_node(self) -> Node:
@@ -186,37 +198,55 @@ class Cluster:
                     f"/_node/_local/_nodes/couchdb@{node.private_address}", json={}
                 )
             except requests.exceptions.HTTPError as e:
-                if e.response.status_code != 409:
+                if e.response and e.response.status_code != 409:
                     raise e
         self.nodes.append(new_node)
         self.reorder_nodes()
         return new_node
 
-    def create_db(self, name: str, q: int = 2, n: int = 2) -> DB:
-        return self.default_node.create_db(name, q=q, n=n)
+    def seed(self, num_dbs: int, docs_per_db: int):
+        def do(i):
+            db = self.db(f"db-{i}").create()
+            for i in range(docs_per_db):
+                db.insert({"index": i})
 
-    def all_missing_dbs(self) -> dict[Node, set[str]]:
-        with ThreadPoolExecutor(max_workers=len(self.nodes)) as executor:
-            futures: list[Future[list[DB]]] = []
-            for node in self.nodes:
-                futures.append(executor.submit(node.dbs))
+        parallel_iter_with_progress(
+            do,
+            range(num_dbs),
+            description="creating databases",
+        )
 
-            dbs: dict[Node, set[str]] = {}
-            for i, future in enumerate(futures):
-                dbs[self.nodes[i]] = set([db.name for db in future.result()])
+    def validate_seed(self, num_dbs: int, docs_per_db: int):
+        total = 0
+        for info in self.dbs_info(
+            (db.name for db in self.dbs(start_key="db-", end_key="db-\ufff0"))
+        ):
+            total += 1
+            if info["info"]["doc_count"] != docs_per_db:
+                raise Exception(
+                    f"db {info['key']} has {info['info']['doc_count']} docs"
+                )
 
-            all_dbs = set()
-            for node in dbs:
-                all_dbs |= dbs[node]
+        if total != num_dbs:
+            raise Exception(f"expected {num_dbs} dbs, got {total}")
 
-            missing_dbs = {}
-            for node in dbs:
-                missing_dbs[node] = all_dbs - dbs[node]
+    def wait_for_seed(self, num_dbs: int, docs_per_db: int):
+        while True:
+            sleep(0.5)
+            total = 0
+            for info in self.dbs_info(
+                (db.name for db in self.dbs(start_key="db-", end_key="db-\ufff0"))
+            ):
+                total += 1
+                if info["info"]["doc_count"] != docs_per_db:
+                    continue
+            if total != num_dbs:
+                continue
+            break
 
-            return missing_dbs
-
-    def random_missing_db(self) -> DB | None:
-        for node, dbs in self.all_missing_dbs().items():
-            if len(dbs) > 0:
-                return node.db(dbs.pop())
-        return None
+    def destroy_seed_data(self):
+        parallel_iter_with_progress(
+            lambda db: db.destroy(),
+            self.dbs(start_key="db-", end_key="db-\ufff0"),
+            description="destroying databases",
+        )
