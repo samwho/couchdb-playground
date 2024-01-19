@@ -92,22 +92,8 @@ def init(name: str, nodes: int, image: str):
 @clster.command()
 @click.argument("name", default="default")
 def destroy(name: str):
-    client = docker.from_env()
-    console = Console()
-    filters = {"label": f"cpg={name}"}
-
-    with console.status("stopping nodes..."):
-        parallel_map(lambda c: c.stop(), client.containers.list(filters=filters))  # type: ignore
-
-    with console.status("removing nodes..."):
-        client.containers.prune(filters=filters)
-
-    with console.status("deleting volumes..."):
-        parallel_map(lambda v: v.remove(), client.volumes.list(filters=filters))  # type: ignore
-        client.volumes.prune(filters=filters)
-
-    with console.status("deleting network..."):
-        client.networks.prune(filters=filters)
+    cluster = Cluster.from_name(name)
+    cluster.destroy()
 
 
 @clster.command("list")

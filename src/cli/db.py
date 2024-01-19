@@ -37,7 +37,7 @@ def list():
     cluster = Cluster.current()
     console = Console()
 
-    with console.status("fetching dbs..."):
+    with console.status("fetching dbs"):
         table = Table(header_style="bold magenta", box=None, show_lines=True)
         table.add_column("name")
         table.add_column("docs")

@@ -8,7 +8,7 @@ import requests
 from couch.types import DBInfo, MembershipResponse, SystemResponse
 from docker.models.containers import Container
 from couch.http import HTTPMixin
-from utils import batched, random_string
+from utils import batched, random_string, status
 
 from .credentials import password, username
 from .db import DB
@@ -91,18 +91,20 @@ class Node(HTTPMixin):
         return datetime.now() - self.started_at()
 
     def restart(self):
-        self.container.restart()
+        with status(f"restarting node:{self.index} ({self.private_address})"):
+            self.container.restart()
 
     def destroy(self, remove=True, keep_data=False):
-        if remove:
-            self.remove()
+        with status(f"destroying node:{self.index} ({self.private_address})"):
+            if remove:
+                self.remove()
 
-        client = docker.from_env()
-        self.container.stop()
-        self.container.remove()
+            client = docker.from_env()
+            self.container.stop()
+            self.container.remove()
 
-        if not keep_data:
-            client.volumes.get(self.container.name).remove()  # type: ignore
+            if not keep_data:
+                client.volumes.get(self.container.name).remove()  # type: ignore
 
     def remove(self):
         try:

@@ -6,6 +6,7 @@ from rich.syntax import Syntax
 
 import click
 from couch.cluster import Cluster
+from utils import status
 
 
 @click.group()
@@ -17,7 +18,7 @@ def do_request(f: Callable[[Cluster], requests.Response]):
     cluster = Cluster.current()
     console = Console()
     try:
-        with console.status("waiting for response..."):
+        with status("waiting for response"):
             resp = f(cluster)
         console.print(Syntax(json.dumps(resp.json(), indent=2), "json"))
     except requests.exceptions.HTTPError as e:

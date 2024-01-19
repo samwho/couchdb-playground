@@ -22,9 +22,7 @@ def destroy(index: int):
     if not node:
         console.print(f"❌ node:{index} does not exist")
         exit(1)
-    with console.status(f"destroying node {index} ({node.private_address}))..."):
-        node.destroy()
-    console.print(f"✅ destroyed node {index} ({node.private_address}))")
+    node.destroy()
 
 
 @node.command()
@@ -32,12 +30,9 @@ def destroy(index: int):
 @click.option("--maintenance-mode", "-m", is_flag=True, default=False)
 @click.option("--image", default=None, type=str)
 def create(count: int, maintenance_mode: bool, image: str):
-    console = Console()
     cluster = Cluster.current()
     for _ in range(count):
-        with console.status(f"creating node:{len(cluster.nodes)}..."):
-            node = cluster.add_node(maintenance_mode=maintenance_mode, image=image)
-        console.print(f"✅ created node:{node.index} ({node.private_address}))")
+        cluster.add_node(maintenance_mode=maintenance_mode, image=image)
 
 
 @node.command()
@@ -122,7 +117,4 @@ def restart(index: int):
     if not node:
         console.print(f"❌ node:{index} does not exist")
         exit(1)
-
-    with console.status(f"restarting node {index} ({node.private_address}))..."):
-        node.restart()
-    console.print(f"✅ restarted node {index} ({node.private_address}))")
+    node.restart()

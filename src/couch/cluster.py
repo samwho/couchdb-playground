@@ -17,6 +17,7 @@ from utils import (
     parallel_map,
     progress,
     retry,
+    status,
 )
 
 from .credentials import password, username
@@ -50,29 +51,54 @@ class Cluster(HTTPMixin):
     @staticmethod
     def init(name: str, num_nodes: int = 3, image: str = "couchdb:3.2.1") -> "Cluster":
         console = Console()
+        console.print(f"🚀 creating cluster with name {name}")
+
         client = docker.from_env()
 
         if len(client.networks.list(filters={"label": f"cpg={name}"})) != 0:
-            click.echo(f'cluster with name "{name}" already exists')
+            console.print(f'❌ cluster with name "{name}" already exists')
             exit(1)
 
-        with console.status("creating network..."):
+        with status("creating network"):
             client.networks.create(f"cpg-{name}", driver="bridge", labels={"cpg": name})
 
-        with console.status("creating nodes..."):
+        with status("creating nodes"):
             nodes = list(
                 parallel_map(lambda _: Node.create(name, image=image), range(num_nodes))
             )
             cluster = Cluster(name, nodes)
 
-        with console.status("waiting for nodes to become healthy..."):
+        with status("waiting for nodes to become healthy"):
             while not cluster.ok():
                 sleep(0.5)
 
-        with console.status("configuring clustering..."):
+        with status("configuring clustering"):
             cluster.setup()
 
+        console.print(f"✅ created cluster with name {name}")
         return cluster
+
+    def destroy(self):
+        client = docker.from_env()
+        console = Console()
+        filters = {"label": f"cpg={self.name}"}
+
+        console.print(f'💥 destroying cluster "{self.name}"')
+
+        with status("stopping nodes"):
+            parallel_map(lambda c: c.stop(), client.containers.list(filters=filters))  # type: ignore
+
+        with status("removing nodes"):
+            client.containers.prune(filters=filters)
+
+        with status("deleting volumes"):
+            parallel_map(lambda v: v.remove(), client.volumes.list(filters=filters))  # type: ignore
+            client.volumes.prune(filters=filters)
+
+        with status("deleting network"):
+            client.networks.prune(filters=filters)
+
+        console.print(f'✅ destroyed cluster "{self.name}"')
 
     @staticmethod
     def from_name(name: str) -> "Cluster":
@@ -229,26 +255,29 @@ class Cluster(HTTPMixin):
     def add_node(
         self, maintenance_mode: bool = False, image: str | None = None
     ) -> Node:
-        if image is None:
-            image = self.nodes[0].image
-        new_node = Node.create(self.name, image=image)
-        new_node.reload()
+        with status(f"adding new node:{len(self.nodes)} ({image})"):
+            if image is None:
+                image = self.nodes[0].image
+            new_node = Node.create(self.name, image=image)
+            new_node.reload()
 
-        if maintenance_mode:
-            new_node.set_config("couchdb", "maintenance_mode", "true")
-        self.put(f"/_node/_local/_nodes/couchdb@{new_node.private_address}", json={})
+            if maintenance_mode:
+                new_node.set_config("couchdb", "maintenance_mode", "true")
+            self.put(
+                f"/_node/_local/_nodes/couchdb@{new_node.private_address}", json={}
+            )
 
-        for node in self.nodes:
-            try:
-                new_node.put(
-                    f"/_node/_local/_nodes/couchdb@{node.private_address}", json={}
-                )
-            except requests.exceptions.HTTPError as e:
-                if e.response and e.response.status_code != 409:
-                    raise e
-        self.nodes.append(new_node)
-        self.reorder_nodes()
-        return new_node
+            for node in self.nodes:
+                try:
+                    new_node.put(
+                        f"/_node/_local/_nodes/couchdb@{node.private_address}", json={}
+                    )
+                except requests.exceptions.HTTPError as e:
+                    if e.response and e.response.status_code != 409:
+                        raise e
+            self.nodes.append(new_node)
+            self.reorder_nodes()
+            return new_node
 
     def seed(self, num_dbs: int, docs_per_db: int):
         def do(i):
@@ -274,7 +303,7 @@ class Cluster(HTTPMixin):
     def wait_for_seed(self, num_dbs: int, docs_per_db: int, timeout: int = 60):
         console = Console()
         for node in self.nodes:
-            with console.status(f"waiting for node:{node.index} to sync..."):
+            with console.status(f"waiting for node:{node.index} to sync"):
                 node.wait_for_seed(num_dbs, docs_per_db, timeout)
             console.print(f"✅ node:{node.index} synced")
 

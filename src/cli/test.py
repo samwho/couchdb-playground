@@ -17,7 +17,7 @@ def lose_data(num_dbs: int, docs_per_db: int):
     cluster = Cluster.current()
     console = Console()
 
-    console.print("🕵️  checking to see if we can re-use existing data...")
+    console.print("🕵️  checking to see if we can re-use existing data")
     try:
         cluster.validate_seed(num_dbs, docs_per_db)
         console.print("✅ existing data is valid, re-using")
@@ -29,16 +29,8 @@ def lose_data(num_dbs: int, docs_per_db: int):
 
     while True:
         node = cluster.nodes[-1]
-
-        with console.status(
-            f"destroying node:{node.index} ({node.private_address}))..."
-        ):
-            node.destroy()
-        console.print(f"✅ destroyed node:{node.index} ({node.private_address}))")
-
-        with console.status("adding new node..."):
-            node = cluster.add_node()
-        console.print(f"✅ added new node:{node.index} ({node.private_address}))")
+        node.destroy()
+        node = cluster.add_node()
 
         def do(i):
             try:
@@ -62,7 +54,7 @@ def lose_data(num_dbs: int, docs_per_db: int):
 
         try:
             cluster.validate_seed(num_dbs, docs_per_db)
-            console.print("no data loss detected, retrying...")
+            console.print("no data loss detected, retrying")
         except Exception as e:
             console.print(f"detected data loss: {e}")
             break
@@ -83,10 +75,9 @@ def safely_add_node(unsafe: bool, num_dbs: int, docs_per_db: int):
         cluster.seed(num_dbs, docs_per_db)
         cluster.wait_for_seed(num_dbs, docs_per_db)
 
-    with console.status(f"adding new node (maintenance_mode={not unsafe})"):
-        node = cluster.add_node(maintenance_mode=not unsafe)
-        if not unsafe:
-            node.set_config("couchdb", "maintenance_mode", "false")
+    node = cluster.add_node(maintenance_mode=not unsafe)
+    if not unsafe:
+        node.set_config("couchdb", "maintenance_mode", "false")
 
     def do(i):
         try:

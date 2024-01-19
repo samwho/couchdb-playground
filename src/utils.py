@@ -27,10 +27,6 @@ def parallel_map[T, R](
         return executor.map(f, iter)
 
 
-def console() -> Console:
-    return Console()
-
-
 def progress(**kwargs) -> Progress:
     columns = [
         TextColumn("[progress.description]{task.description}"),
@@ -39,6 +35,18 @@ def progress(**kwargs) -> Progress:
         TimeElapsedColumn(),
     ]
     return Progress(*columns, expand=True, **kwargs)
+
+
+@contextmanager
+def status(text: str):
+    console = Console()
+    with console.status(f" {text}"):
+        try:
+            yield
+        except Exception:
+            console.print(f"❌ {text}")
+            raise
+    console.print(f"✅ {text}")
 
 
 def parallel_map_with_progress[T, R](
