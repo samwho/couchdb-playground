@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from time import sleep
 from typing import TYPE_CHECKING, Any, Generator, Iterable, cast
 
 import docker
@@ -179,3 +180,37 @@ class Node(HTTPMixin):
 
     def system(self) -> SystemResponse:
         return self.get("/_node/_local/_system").json()
+
+    def validate_seed(self, num_dbs: int, docs_per_db: int):
+        total = 0
+        for info in self.dbs_info(
+            (db.name for db in self.dbs(start_key="db-", end_key="db-\ufff0"))
+        ):
+            if "error" in info:
+                continue
+            total += 1
+            if info["info"]["doc_count"] != docs_per_db:
+                raise Exception(f"{info['key']} has {info['info']['doc_count']} docs")
+
+        if total != num_dbs:
+            raise Exception(f"expected {num_dbs} dbs, got {total}")
+
+    def wait_for_seed(self, num_dbs: int, docs_per_db: int, timeout: int = 60):
+        start = datetime.now()
+        while True:
+            elapsed = (datetime.now() - start).total_seconds()
+            if elapsed > timeout:
+                raise Exception(
+                    f"timed out waiting for seed data to be created (elapsed={elapsed}s)"
+                )
+            sleep(0.5)
+            total = 0
+            for info in self.dbs_info(
+                (db.name for db in self.dbs(start_key="db-", end_key="db-\ufff0"))
+            ):
+                total += 1
+                if info["info"]["doc_count"] != docs_per_db:
+                    continue
+            if total != num_dbs:
+                continue
+            break

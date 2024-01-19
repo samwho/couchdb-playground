@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 
 class MembershipResponse(TypedDict):
@@ -32,9 +32,11 @@ class DatabaseResponse(TypedDict):
     instance_start_time: str
     cluster: ClusterOpts
 
+
 class DBInfo(TypedDict):
     key: str
     info: DatabaseResponse
+    error: NotRequired[str]
 
 
 class MemoryInfo(TypedDict):

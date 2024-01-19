@@ -43,6 +43,8 @@ def list():
     table.add_column("r")
     table.add_column("w")
     for info in cluster.dbs_info((db.name for db in cluster.dbs())):
+        if "error" in info:
+            continue
         table.add_row(
             info["key"],
             str(info["info"]["doc_count"]),
