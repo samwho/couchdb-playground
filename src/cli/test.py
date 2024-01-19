@@ -1,3 +1,4 @@
+from threading import Thread
 
 import click
 import requests
@@ -75,3 +76,22 @@ def lose_data(num_dbs: int):
             logger.info("no data loss detected, retrying...")
 
 
+@test.command()
+def safely_add_node():
+    cluster = Cluster.current()
+    if cluster.db("db-0").exists():
+        cluster.destroy_seed_data()
+
+    def seed():
+        cluster.seed(2000, 10)
+
+    thread = Thread(target=seed)
+    thread.start()
+
+    node = cluster.add_node(maintenance_mode=True)
+
+    thread.join()
+
+    node.set_config("couchdb", "maintenance_mode", "false")
+
+    cluster.wait_for_seed(2000, 10)

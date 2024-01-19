@@ -16,10 +16,10 @@ from .config import config
 
 
 @click.group()
-@click.option("--node", default=0)
+@click.option("--node", required=False, type=int)
 @click.option("--cluster", default="default")
 @click.option("-v", "--verbose", default=False, is_flag=True)
-def main(verbose: bool, node: int, cluster: str):
+def main(verbose: bool, node: int | None, cluster: str):
     logger.setLevel(logging.DEBUG if verbose else logging.INFO)
     if "cluster" in sys.argv:
         return

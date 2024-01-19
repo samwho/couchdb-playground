@@ -1,5 +1,7 @@
+import functools
 import random
 import string
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from itertools import islice
@@ -84,3 +86,24 @@ def duration_to_human(delta: timedelta) -> str:
         return f"{seconds / 60 / 60:.0f}h"
     else:
         return f"{seconds / 60 / 60 / 24:.0f}d"
+
+
+def retry(max_attempts=3, initial_wait=1, backoff_factor=2):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            attempts = 0
+            wait_time = initial_wait
+            while attempts < max_attempts:
+                try:
+                    return func(*args, **kwargs)
+                except Exception:
+                    attempts += 1
+                    if attempts == max_attempts:
+                        raise
+                    time.sleep(wait_time + random.uniform(0, wait_time))
+                    wait_time *= backoff_factor
+
+        return wrapper
+
+    return decorator

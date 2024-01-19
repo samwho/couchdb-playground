@@ -6,7 +6,7 @@ import requests
 from couch.log import logger
 from couch.types import DBInfo, MembershipResponse, SystemResponse
 from docker.models.containers import Container
-from utils import batched, random_string
+from utils import batched, random_string, retry
 
 from .credentials import password, session, username
 from .db import DB
@@ -130,6 +130,7 @@ class Node:
     def __hash__(self) -> int:
         return hash(self.local_address)
 
+    @retry(max_attempts=2)
     def request(
         self, method: str, path: str, json: dict | None = None
     ) -> requests.Response:

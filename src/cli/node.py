@@ -1,6 +1,9 @@
+from threading import Thread
+
 import click
-from couch.cluster import Cluster
+from couch.cluster import Cluster, get_default_node
 from couch.log import logger
+from couch.node import Node
 from rich.console import Console
 from rich.table import Table
 from utils import duration_to_human
@@ -62,16 +65,43 @@ def list():
 
 
 @node.command()
-@click.argument("index", type=int)
-def logs(index: int):
+def logs():
     cluster = Cluster.current()
-    node = cluster.get_node(index)
-    if not node:
-        logger.error(f"node {index} does not exist")
-        exit(1)
+    console = Console()
+    colors = [
+        "red",
+        "green",
+        "blue",
+        "yellow",
+        "magenta",
+        "cyan",
+        "white",
+        "bright_black",
+    ]
 
-    for chunk in node.container.logs(stream=True):
-        print(chunk.decode("utf-8"), end="")
+    nodes = [cluster.default_node]
+    if get_default_node() is None:
+        nodes = cluster.nodes
+
+    def tail_logs(node: Node):
+        for chunk in node.container.logs(stream=True, follow=True, tail=20):
+            console.print(
+                f"[{colors[node.index]}]\\[node:{node.index}][/{colors[node.index]}][white]{chunk.decode().strip()}[/white]",
+                highlight=False,
+            )
+
+    threads = []
+
+    for node in nodes:
+        thread = Thread(target=tail_logs, args=(node,), daemon=True)
+        thread.start()
+        threads.append(thread)
+
+    try:
+        for thread in threads:
+            thread.join()
+    except KeyboardInterrupt:
+        return
 
 
 @node.command()

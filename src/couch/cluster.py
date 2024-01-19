@@ -1,3 +1,4 @@
+from random import randint
 from time import sleep
 from typing import Any, Generator, Iterable, cast
 
@@ -6,7 +7,7 @@ import docker
 import requests
 from couch.log import logger
 from docker.models.containers import Container
-from utils import parallel_iter_with_progress, parallel_map
+from utils import parallel_iter_with_progress, parallel_map, retry
 
 from .credentials import password, username
 from .db import DB
@@ -14,7 +15,7 @@ from .node import Node
 from .types import DBInfo, MembershipResponse
 
 _current_cluster = "default"
-_default_node = 0
+_default_node: int | None = None
 
 
 def set_current_cluster(name: str):
@@ -22,9 +23,14 @@ def set_current_cluster(name: str):
     _current_cluster = name
 
 
-def set_default_node(node: int):
+def set_default_node(node: int | None):
     global _default_node
     _default_node = node
+
+
+def get_default_node() -> int | None:
+    global _default_node
+    return _default_node
 
 
 class Cluster:
@@ -91,6 +97,8 @@ class Cluster:
 
     @property
     def default_node(self) -> Node:
+        if _default_node is None:
+            return self.nodes[randint(0, len(self.nodes) - 1)]
         return self.nodes[_default_node]
 
     def setup(self):
@@ -153,15 +161,19 @@ class Cluster:
                 return False
         return len(actual) == len(self.nodes)
 
+    @retry()
     def post(self, path: str, json: dict | None = None) -> requests.Response:
         return self.default_node.post(path, json)
 
+    @retry()
     def put(self, path: str, json: dict | None = None) -> requests.Response:
         return self.default_node.put(path, json)
 
+    @retry()
     def get(self, path: str) -> requests.Response:
         return self.default_node.get(path)
 
+    @retry()
     def delete(self, path: str) -> requests.Response:
         return self.default_node.delete(path)
 

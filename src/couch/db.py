@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, Any
 
+import requests
 from couch.types import DatabaseResponse
 
 from .document import Document
@@ -43,6 +44,15 @@ class DB:
     def get(self, id: str) -> Document:
         resp = self.node.get(f"/{self.name}/{id}")
         return Document.from_response(self, resp)
+
+    def exists(self) -> bool:
+        try:
+            self.describe()
+            return True
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:
+                return False
+            raise e
 
     def destroy(self):
         self.node.delete(f"/{self.name}")
