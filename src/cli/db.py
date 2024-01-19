@@ -5,7 +5,7 @@ from couch.cluster import Cluster
 from rich.console import Console
 from rich.syntax import Syntax
 from rich.table import Table
-from utils import parallel_iter_with_progress
+from utils import parallel_iter_with_progress, status
 
 
 @click.group()
@@ -37,7 +37,7 @@ def list():
     cluster = Cluster.current()
     console = Console()
 
-    with console.status("fetching dbs"):
+    with status("fetching dbs"):
         table = Table(header_style="bold magenta", box=None, show_lines=True)
         table.add_column("name")
         table.add_column("docs")

@@ -253,7 +253,7 @@ class Cluster(HTTPMixin):
         return self.nodes[i]
 
     def add_node(
-        self, maintenance_mode: bool = False, image: str | None = None
+        self, maintenance_mode: bool = False, image: str = "couchdb:3.2.1"
     ) -> Node:
         with status(f"adding new node:{len(self.nodes)} ({image})"):
             if image is None:
@@ -301,11 +301,9 @@ class Cluster(HTTPMixin):
             parallel_iter(do, self.nodes)
 
     def wait_for_seed(self, num_dbs: int, docs_per_db: int, timeout: int = 60):
-        console = Console()
         for node in self.nodes:
-            with console.status(f"waiting for node:{node.index} to sync"):
+            with status(f"waiting for node:{node.index} to sync"):
                 node.wait_for_seed(num_dbs, docs_per_db, timeout)
-            console.print(f"✅ node:{node.index} synced")
 
     def destroy_seed_data(self):
         parallel_iter_with_progress(

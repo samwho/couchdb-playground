@@ -243,11 +243,11 @@ class Node(HTTPMixin):
             for info in self.dbs_info(
                 (db.name for db in self.dbs(start_key="db-", end_key="db-\ufff0"))
             ):
-                total += 1
                 if "error" in info:
                     continue
                 if info["info"]["doc_count"] != docs_per_db:
                     continue
+                total += 1
             if total != num_dbs:
                 continue
             break
